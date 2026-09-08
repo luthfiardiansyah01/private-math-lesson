@@ -1,0 +1,314 @@
+// Learning Management System - Phase 1 Core Learning
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         String   @default("STUDENT") // STUDENT | TUTOR | PARENT
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  profile          Profile?
+  learningSessions LearningSession[]
+  progress         Progress[]
+  mastery          Mastery[]
+  masteryHistory   MasteryHistory[]
+  exerciseAttempts ExerciseAttempt[]
+  subjects         Subject[]
+  gameSessions     GameSession[]
+  studentStats     StudentStats?
+  achievements     StudentAchievement[]
+  recommendations  Recommendation[]
+  // Parent relationships
+  childrenLinks    ParentLink[]   @relation("ParentLinks")
+  parentLinks      ParentLink[]   @relation("StudentLinks")
+}
+
+// ===== Phase 3: Intelligence & Reporting =====
+
+// Daily mastery snapshot for trend analysis. One row per (student, subject, date).
+model MasteryHistory {
+  id          String   @id @default(cuid())
+  studentId   String
+  student     User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  subjectId   String
+  subject     Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  date        String   // YYYY-MM-DD
+  masteryLevel Int     @default(0) // 0-100 weighted mastery
+  lessonsCompleted Int @default(0)
+  avgExerciseScore Int @default(0)
+  gameScoreAvg Int     @default(0)
+  createdAt   DateTime @default(now())
+
+  @@unique([studentId, subjectId, date])
+  @@index([studentId, date])
+}
+
+model Recommendation {
+  id          String   @id @default(cuid())
+  studentId   String
+  student     User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  type        String   @default("LEARNING") // LEARNING | WEAK_TOPIC | STUDY_PLAN
+  content     String   // The AI-generated recommendation text (markdown)
+  priority    String   @default("MEDIUM") // LOW | MEDIUM | HIGH
+  relatedSubjectId String?
+  relatedTopicId   String?
+  createdAt   DateTime @default(now())
+
+  @@index([studentId, createdAt])
+}
+
+model ParentLink {
+  id          String   @id @default(cuid())
+  parentId    String
+  parent      User     @relation("ParentLinks", fields: [parentId], references: [id], onDelete: Cascade)
+  studentId   String
+  student     User     @relation("StudentLinks", fields: [studentId], references: [id], onDelete: Cascade)
+  relation    String   @default("Orang Tua") // Orang Tua | Wali | Kakak
+  createdAt   DateTime @default(now())
+
+  @@unique([parentId, studentId])
+  @@index([parentId])
+  @@index([studentId])
+}
+
+// ===== Phase 2: Gamification =====
+
+model GameSession {
+  id          String   @id @default(cuid())
+  studentId   String
+  student     User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  gameType    String   // QUIZ | MATH_RUSH | MATH_PUZZLE | BOSS_CHALLENGE
+  score       Int      @default(0)
+  xpEarned    Int      @default(0)
+  correctCount Int     @default(0)
+  totalCount  Int      @default(0)
+  durationSec Int      @default(0)
+  status      String   @default("COMPLETED") // COMPLETED | FAILED | ABANDONED
+  metadata    String?  // JSON: { subjectId, bossId, difficulty, maxStreak, ... }
+  createdAt   DateTime @default(now())
+
+  @@index([studentId, gameType])
+  @@index([studentId, createdAt])
+}
+
+model StudentStats {
+  id             String   @id @default(cuid())
+  studentId      String   @unique
+  student        User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  totalXP        Int      @default(0)
+  level          Int      @default(1)
+  currentStreak  Int      @default(0)
+  longestStreak  Int      @default(0)
+  lastActiveDate String?  // YYYY-MM-DD
+  gamesPlayed    Int      @default(0)
+  totalCorrect   Int      @default(0)
+  totalQuestions Int      @default(0)
+  bossesDefeated Int      @default(0)
+  puzzlesSolved  Int      @default(0)
+  // best scores per game type
+  bestQuizScore      Int  @default(0)
+  bestMathRushScore  Int  @default(0)
+  bestMathPuzzleScore Int @default(0)
+  bestBossScore      Int  @default(0)
+  updatedAt      DateTime @updatedAt
+}
+
+model Achievement {
+  id          String   @id @default(cuid())
+  code        String   @unique // FIRST_GAME, QUIZ_PERFECT, etc.
+  title       String
+  description String
+  icon        String   @default("Trophy")
+  category    String   @default("GENERAL") // GENERAL | QUIZ | RUSH | PUZZLE | BOSS | STREAK | LEVEL
+  threshold   Int      @default(0)
+  xpReward    Int      @default(0)
+  unlocks     StudentAchievement[]
+}
+
+model StudentAchievement {
+  id            String   @id @default(cuid())
+  studentId     String
+  student       User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  achievementId String
+  achievement   Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+  unlockedAt    DateTime @default(now())
+
+  @@unique([studentId, achievementId])
+}
+
+model Boss {
+  id          String   @id @default(cuid())
+  name        String
+  description String
+  subjectId   String?
+  hp          Int      @default(100)
+  attack      Int      @default(15) // damage dealt to student on wrong answer
+  icon        String   @default("Dragon")
+  color       String   @default("rose")
+  difficulty  String   @default("NORMAL") // EASY | NORMAL | HARD
+  rewardXP    Int      @default(200)
+  questions   String   // JSON array of { text, options, correctAnswer, explanation }
+  createdAt   DateTime @default(now())
+}
+
+model Puzzle {
+  id          String   @id @default(cuid())
+  type        String   // SEQUENCE | BALANCE | PATTERN | MISSING_OPERATOR | WORD_PROBLEM
+  question    String
+  options     String?  // JSON array (for MCQ-style puzzles)
+  answer      String
+  explanation String?
+  difficulty  String   @default("EASY") // EASY | MEDIUM | HARD
+  xpReward    Int      @default(50)
+  createdAt   DateTime @default(now())
+}
+
+model Profile {
+  id             String   @id @default(cuid())
+  userId         String   @unique
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bio            String?
+  avatarUrl      String?
+  educationLevel String? // SD | SMP | SMA | Kuliah
+  targetExam     String? // e.g. UTBK, SNBT, UAS
+  studyGoals     String?
+  phone          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Subject {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  color       String   @default("emerald")
+  icon        String   @default("BookOpen")
+  tutorId     String
+  tutor       User     @relation(fields: [tutorId], references: [id])
+  topics      Topic[]
+  mastery     Mastery[]
+  masteryHistory MasteryHistory[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Topic {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  order       Int      @default(0)
+  subjectId   String
+  subject     Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  lessons     Lesson[]
+  mastery     Mastery[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Lesson {
+  id          String   @id @default(cuid())
+  title       String
+  content     String
+  summary     String?
+  durationMin Int      @default(15)
+  order       Int      @default(0)
+  topicId     String
+  topic       Topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  exercises   Exercise[]
+  progress    Progress[]
+  sessions    LearningSession[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Exercise {
+  id        String   @id @default(cuid())
+  title     String
+  type      String   @default("MCQ") // MCQ | TRUE_FALSE | SHORT_ANSWER
+  lessonId  String
+  lesson    Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  questions Question[]
+  attempts  ExerciseAttempt[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Question {
+  id            String   @id @default(cuid())
+  exerciseId    String
+  exercise      Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  text          String
+  options       String? // JSON array of strings (for MCQ)
+  correctAnswer String
+  explanation   String?
+  points        Int      @default(1)
+  order         Int      @default(0)
+}
+
+model LearningSession {
+  id          String   @id @default(cuid())
+  studentId   String
+  student     User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  lessonId    String
+  lesson      Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  startedAt   DateTime @default(now())
+  endedAt     DateTime?
+  durationSec Int      @default(0)
+  status      String   @default("IN_PROGRESS") // IN_PROGRESS | COMPLETED | ABANDONED
+}
+
+model Progress {
+  id             String   @id @default(cuid())
+  studentId      String
+  student        User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  lessonId       String
+  lesson         Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  status         String   @default("NOT_STARTED") // NOT_STARTED | IN_PROGRESS | COMPLETED
+  completionPct  Int      @default(0)
+  timeSpentSec   Int      @default(0)
+  lastAccessedAt DateTime?
+
+  @@unique([studentId, lessonId])
+}
+
+model Mastery {
+  id              String   @id @default(cuid())
+  studentId       String
+  student         User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  subjectId       String
+  subject         Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  topicId         String?
+  topic           Topic?   @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  level           Int      @default(0) // 0-100
+  lessonsCompleted Int     @default(0)
+  lessonsTotal    Int      @default(0)
+  avgExerciseScore Int     @default(0)
+  updatedAt       DateTime @updatedAt
+
+  @@unique([studentId, subjectId, topicId])
+}
+
+model ExerciseAttempt {
+  id          String   @id @default(cuid())
+  studentId   String
+  student     User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  exerciseId  String
+  exercise    Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  answers     String   // JSON of { questionId: answer }
+  score       Int      @default(0)
+  totalPoints Int      @default(0)
+  percentage  Int      @default(0)
+  passed      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+}
