@@ -228,6 +228,7 @@ model Lesson {
   exercises   Exercise[]
   progress    Progress[]
   sessions    LearningSession[]
+  attachments LessonAttachment[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
@@ -297,6 +298,19 @@ model Mastery {
   updatedAt       DateTime @updatedAt
 
   @@unique([studentId, subjectId, topicId])
+}
+
+model LessonAttachment {
+  id          String   @id @default(cuid())
+  lessonId    String
+  lesson      Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  filename    String   // original filename displayed to user
+  storedName  String   // name on disk (cuid + ext)
+  mimeType    String   // application/pdf | image/png | image/jpeg | image/webp
+  sizeBytes   Int
+  createdAt   DateTime @default(now())
+
+  @@index([lessonId])
 }
 
 model ExerciseAttempt {

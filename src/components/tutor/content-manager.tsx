@@ -22,6 +22,12 @@ import {
   Check,
   X,
   CircleDot,
+  Paperclip,
+  Upload,
+  Download,
+  Image,
+  Sparkles,
+  AlertTriangle,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useNav } from "@/lib/store";
@@ -98,6 +104,7 @@ import type {
   ExerciseDTO,
   QuestionDTO,
   ExerciseType,
+  AttachmentDTO,
 } from "@/lib/types";
 
 // ---------- constants ----------
@@ -895,6 +902,66 @@ function LessonRow({
 }
 
 // ============================================================
+// GeneratedQuestionsImporter — select exercise and bulk-add questions
+// ============================================================
+
+function GeneratedQuestionsImporter({
+  questions,
+  exercises,
+  onSuccess,
+}: {
+  questions: { text: string; options: string[]; correctAnswer: string; explanation: string }[];
+  exercises: ExerciseDTO[];
+  onSuccess: () => void;
+}) {
+  const [selectedExerciseId, setSelectedExerciseId] = useState<string>("");
+  const [importing, setImporting] = useState(false);
+
+  const handleImport = async () => {
+    if (!selectedExerciseId || questions.length === 0) return;
+    setImporting(true);
+    try {
+      for (const q of questions) {
+        await api.createQuestion({
+          exerciseId: selectedExerciseId,
+          text: q.text,
+          options: q.options,
+          correctAnswer: q.correctAnswer,
+          explanation: q.explanation,
+        });
+      }
+      toast.success(`${questions.length} soal berhasil ditambahkan ke latihan`);
+      onSuccess();
+    } catch (e) {
+      toast.error((e as Error).message || "Gagal menambahkan soal");
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-2">
+      <Select value={selectedExerciseId} onValueChange={setSelectedExerciseId}>
+        <SelectTrigger className="w-52">
+          <SelectValue placeholder="Pilih latihan..." />
+        </SelectTrigger>
+        <SelectContent>
+          {exercises.map((ex) => (
+            <SelectItem key={ex.id} value={ex.id}>
+              {ex.title}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Button onClick={handleImport} disabled={!selectedExerciseId || importing}>
+        {importing && <Loader2 className="w-4 h-4 animate-spin" />}
+        Tambah ke Latihan
+      </Button>
+    </div>
+  );
+}
+
+// ============================================================
 // Level 3 — Lesson detail editor (content + exercises + questions)
 // ============================================================
 
@@ -1011,6 +1078,52 @@ function LessonDetailLevel({ subjectId, lessonId }: { subjectId: string; lessonI
     onError: (e: Error) => toast.error(e.message || "Gagal menghapus soal"),
   });
 
+  // Generate from references
+  const [generatedContent, setGeneratedContent] = useState<string | null>(null);
+  const [generatedQuestions, setGeneratedQuestions] = useState<
+    { text: string; options: string[]; correctAnswer: string; explanation: string }[] | null
+  >(null);
+  const [generatePreviewOpen, setGeneratePreviewOpen] = useState(false);
+  const [generateQuestionsPreviewOpen, setGenerateQuestionsPreviewOpen] = useState(false);
+
+  const generateContentMut = useMutation({
+    mutationFn: (lessonId: string) => api.generateFromReferences(lessonId, "content"),
+    onSuccess: (data) => {
+      setGeneratedContent(data.generated);
+      setGeneratePreviewOpen(true);
+      toast.success(`Materi dibuat dari ${data.referencesUsed.length} referensi`);
+    },
+    onError: (e: Error) => toast.error(e.message || "Gagal membuat materi dari referensi"),
+  });
+
+  const generateQuestionsMut = useMutation({
+    mutationFn: (lessonId: string) => api.generateFromReferences(lessonId, "questions"),
+    onSuccess: (data) => {
+      try {
+        const jsonMatch = data.generated.match(/```json\n?([\s\S]*?)\n?```/);
+        const raw = jsonMatch ? jsonMatch[1] : data.generated;
+        const parsed = JSON.parse(raw);
+        setGeneratedQuestions(Array.isArray(parsed) ? parsed : null);
+        setGenerateQuestionsPreviewOpen(true);
+        toast.success(`${Array.isArray(parsed) ? parsed.length : 0} soal dibuat dari referensi`);
+      } catch {
+        toast.error("Format soal tidak valid dari AI");
+      }
+    },
+    onError: (e: Error) => toast.error(e.message || "Gagal membuat soal dari referensi"),
+  });
+
+  const applyGeneratedContentMut = useMutation({
+    mutationFn: (content: string) => api.updateLesson(lessonId, { content }),
+    onSuccess: () => {
+      toast.success("Konten pelajaran berhasil diperbarui dari referensi");
+      qc.invalidateQueries({ queryKey: ["subject", subjectId] });
+      setGeneratePreviewOpen(false);
+      setGeneratedContent(null);
+    },
+    onError: (e: Error) => toast.error(e.message || "Gagal menyimpan konten"),
+  });
+
   // Resolve the lesson + topic from the cached subject detail.
   const ctx = useMemo(
     () => findLessonContext(subject, lessonId),
@@ -1037,6 +1150,7 @@ function LessonDetailLevel({ subjectId, lessonId }: { subjectId: string; lessonI
   }
 
   const { topic, lesson } = ctx;
+  const hasAttachments = (lesson.attachments?.length ?? 0) > 0;
   const c = colorClasses(subject.color);
 
   const handleExerciseSubmit = (v: { title: string; type: ExerciseType }) => {
@@ -1102,11 +1216,57 @@ function LessonDetailLevel({ subjectId, lessonId }: { subjectId: string; lessonI
             </span>
           </div>
         </div>
-        <Button variant="outline" size="sm" onClick={() => setLessonEditOpen(true)}>
-          <Pencil className="w-3.5 h-3.5" />
-          Edit Pelajaran
-        </Button>
+        <div className="flex items-center gap-2 flex-wrap">
+          {hasAttachments && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="default"
+                  size="sm"
+                  disabled={generateContentMut.isPending || generateQuestionsMut.isPending}
+                >
+                  {(generateContentMut.isPending || generateQuestionsMut.isPending) ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Sparkles className="w-3.5 h-3.5" />
+                  )}
+                  {generateContentMut.isPending ? "Membuat materi..." : generateQuestionsMut.isPending ? "Membuat soal..." : "Buat dari Referensi"}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  onClick={() => generateContentMut.mutate(lesson.id)}
+                  disabled={generateContentMut.isPending}
+                >
+                  <FileText className="w-4 h-4" />
+                  Buat Materi / Penjelasan
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => generateQuestionsMut.mutate(lesson.id)}
+                  disabled={generateQuestionsMut.isPending}
+                >
+                  <PenTool className="w-4 h-4" />
+                  Buat Soal Latihan
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+          <Button variant="outline" size="sm" onClick={() => setLessonEditOpen(true)}>
+            <Pencil className="w-3.5 h-3.5" />
+            Edit Pelajaran
+          </Button>
+        </div>
       </div>
+
+      {/* No-reference warning */}
+      {!hasAttachments && (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30 p-3 text-sm text-amber-800 dark:text-amber-200">
+          <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+          <span>
+            Belum ada referensi diunggah. Upload buku atau dokumen di bagian <strong>Lampiran Materi</strong> agar materi dan soal dapat dibuat secara otomatis dari referensi tersebut.
+          </span>
+        </div>
+      )}
 
       {/* Content editor */}
       <LessonContentEditor
@@ -1115,6 +1275,13 @@ function LessonDetailLevel({ subjectId, lessonId }: { subjectId: string; lessonI
         initialContent={lesson.content}
         saving={saveContentMut.isPending}
         onSave={(content) => saveContentMut.mutate({ id: lesson.id, content })}
+      />
+
+      {/* Attachments section */}
+      <AttachmentsSection
+        lessonId={lesson.id}
+        attachments={lesson.attachments ?? []}
+        onRefresh={() => qc.invalidateQueries({ queryKey: ["subject", subjectId] })}
       />
 
       {/* Exercises section */}
@@ -1251,7 +1418,262 @@ function LessonDetailLevel({ subjectId, lessonId }: { subjectId: string; lessonI
         confirming={deleteQuestionMut.isPending}
         onConfirm={() => deletingQuestion && deleteQuestionMut.mutate(deletingQuestion.question.id)}
       />
+
+      {/* Preview: generated content */}
+      <Dialog open={generatePreviewOpen} onOpenChange={(v) => { setGeneratePreviewOpen(v); if (!v) setGeneratedContent(null); }}>
+        <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-primary" />
+              Pratinjau Materi dari Referensi
+            </DialogTitle>
+            <DialogDescription>
+              Periksa konten yang dihasilkan. Klik <strong>Terapkan</strong> untuk mengganti konten pelajaran yang ada.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto rounded-md border bg-muted/30 p-4 text-sm font-mono whitespace-pre-wrap min-h-0">
+            {generatedContent ?? ""}
+          </div>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <DialogClose asChild>
+              <Button variant="outline">Batal</Button>
+            </DialogClose>
+            <Button
+              onClick={() => generatedContent && applyGeneratedContentMut.mutate(generatedContent)}
+              disabled={applyGeneratedContentMut.isPending}
+            >
+              {applyGeneratedContentMut.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
+              Terapkan ke Pelajaran
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Preview: generated questions */}
+      <Dialog open={generateQuestionsPreviewOpen} onOpenChange={(v) => { setGenerateQuestionsPreviewOpen(v); if (!v) setGeneratedQuestions(null); }}>
+        <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-primary" />
+              Pratinjau Soal dari Referensi ({generatedQuestions?.length ?? 0} soal)
+            </DialogTitle>
+            <DialogDescription>
+              Pilih latihan yang ingin diisi, lalu klik <strong>Tambah ke Latihan</strong>. Atau buat latihan baru terlebih dahulu.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto space-y-4 min-h-0">
+            {(generatedQuestions ?? []).map((q, i) => (
+              <div key={i} className="rounded-lg border p-4 space-y-2">
+                <p className="font-medium text-sm">{i + 1}. {q.text}</p>
+                <ul className="space-y-1">
+                  {q.options?.map((opt, j) => (
+                    <li key={j} className={`text-sm px-2 py-1 rounded ${opt === q.correctAnswer ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 font-medium" : "text-muted-foreground"}`}>
+                      {opt}
+                    </li>
+                  ))}
+                </ul>
+                {q.explanation && (
+                  <p className="text-xs text-muted-foreground italic border-t pt-2">
+                    💡 {q.explanation}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <DialogClose asChild>
+              <Button variant="outline">Tutup</Button>
+            </DialogClose>
+            {lesson.exercises.length > 0 && (
+              <GeneratedQuestionsImporter
+                questions={generatedQuestions ?? []}
+                exercises={lesson.exercises}
+                onSuccess={() => {
+                  qc.invalidateQueries({ queryKey: ["subject", subjectId] });
+                  setGenerateQuestionsPreviewOpen(false);
+                  setGeneratedQuestions(null);
+                }}
+              />
+            )}
+            <Button
+              variant="outline"
+              onClick={() => {
+                setGenerateQuestionsPreviewOpen(false);
+                setExerciseFormOpen(true);
+              }}
+            >
+              <Plus className="w-4 h-4" />
+              Buat Latihan Baru Dulu
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
+  );
+}
+
+// ============================================================
+// Attachments section (tutor side)
+// ============================================================
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function attachmentIcon(mimeType: string) {
+  if (mimeType.startsWith("image/")) return Image;
+  return FileText;
+}
+
+function AttachmentsSection({
+  lessonId,
+  attachments,
+  onRefresh,
+}: {
+  lessonId: string;
+  attachments: AttachmentDTO[];
+  onRefresh: () => void;
+}) {
+  const [uploading, setUploading] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    // Reset input so same file can be re-selected
+    e.target.value = "";
+    setUploading(true);
+    try {
+      await api.uploadAttachment(lessonId, file);
+      toast.success(`"${file.name}" berhasil diunggah`);
+      onRefresh();
+    } catch (err: unknown) {
+      toast.error((err instanceof Error ? err.message : null) || "Gagal mengunggah file");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    setDeletingId(id);
+    try {
+      await api.deleteAttachment(id);
+      toast.success("Lampiran dihapus");
+      onRefresh();
+    } catch (err: unknown) {
+      toast.error((err instanceof Error ? err.message : null) || "Gagal menghapus lampiran");
+    } finally {
+      setDeletingId(null);
+      setConfirmDeleteId(null);
+    }
+  };
+
+  const confirmItem = attachments.find((a) => a.id === confirmDeleteId);
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Paperclip className="w-4 h-4 text-primary" />
+              Lampiran Materi
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Upload PDF atau gambar sebagai materi pendukung pelajaran
+            </CardDescription>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+          >
+            {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+            {uploading ? "Mengunggah..." : "Upload File"}
+          </Button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".pdf,image/png,image/jpeg,image/jpg,image/webp"
+            className="hidden"
+            onChange={handleFileChange}
+          />
+        </div>
+      </CardHeader>
+      <CardContent>
+        {attachments.length === 0 ? (
+          <div className="rounded-lg border border-dashed p-6 text-center">
+            <Paperclip className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
+            <p className="text-sm text-muted-foreground">Belum ada lampiran.</p>
+            <p className="text-xs text-muted-foreground mt-1">PDF atau gambar (maks. 10 MB)</p>
+          </div>
+        ) : (
+          <ul className="space-y-2">
+            {attachments.map((a) => {
+              const Icon = attachmentIcon(a.mimeType);
+              return (
+                <li key={a.id} className="flex items-center gap-3 rounded-lg border p-3">
+                  <Icon className="w-5 h-5 text-muted-foreground shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{a.filename}</p>
+                    <p className="text-xs text-muted-foreground">{formatBytes(a.sizeBytes)}</p>
+                  </div>
+                  <a
+                    href={`/uploads/${a.storedName}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="shrink-0"
+                  >
+                    <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Lihat file">
+                      <Download className="w-4 h-4" />
+                    </Button>
+                  </a>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-destructive hover:text-destructive shrink-0"
+                    aria-label="Hapus lampiran"
+                    disabled={deletingId === a.id}
+                    onClick={() => setConfirmDeleteId(a.id)}
+                  >
+                    {deletingId === a.id ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="w-4 h-4" />
+                    )}
+                  </Button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </CardContent>
+
+      <AlertDialog open={!!confirmDeleteId} onOpenChange={(v) => !v && setConfirmDeleteId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Hapus Lampiran?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmItem ? `"${confirmItem.filename}" akan dihapus secara permanen.` : "Lampiran ini akan dihapus."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Batal</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => confirmDeleteId && handleDelete(confirmDeleteId)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Hapus
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </Card>
   );
 }
 

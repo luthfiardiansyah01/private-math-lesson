@@ -32,6 +32,15 @@ function mapSubject(s: any): SubjectDTO {
             durationMin: l.durationMin,
             order: l.order,
             topicId: l.topicId,
+            attachments: (l.attachments ?? []).map((a: any) => ({
+              id: a.id,
+              lessonId: a.lessonId,
+              filename: a.filename,
+              storedName: a.storedName,
+              mimeType: a.mimeType,
+              sizeBytes: a.sizeBytes,
+              createdAt: a.createdAt.toISOString(),
+            })),
             exercises: (l.exercises ?? [])
               .slice()
               .sort((a: any, b: any) => a.createdAt.getTime() - b.createdAt.getTime())
@@ -86,6 +95,7 @@ export async function GET(
           lessons: {
             orderBy: { order: "asc" },
             include: {
+              attachments: { orderBy: { createdAt: "asc" } },
               exercises: {
                 include: {
                   questions: { orderBy: { order: "asc" } },

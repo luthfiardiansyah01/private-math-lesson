@@ -30,6 +30,16 @@ export interface ProfileDTO {
 }
 
 // ---- Content ----
+export interface AttachmentDTO {
+  id: string;
+  lessonId: string;
+  filename: string;
+  storedName: string;
+  mimeType: string;
+  sizeBytes: number;
+  createdAt: string;
+}
+
 export interface QuestionDTO {
   id: string;
   text: string;
@@ -57,6 +67,7 @@ export interface LessonDTO {
   order: number;
   topicId: string;
   exercises: ExerciseDTO[];
+  attachments: AttachmentDTO[];
 }
 
 export interface TopicDTO {

@@ -60,6 +60,11 @@ export const api = {
   getProfile: () => req<ProfileDTO>("/api/profile"),
   updateProfile: (data: Partial<ProfileDTO>) =>
     req<ProfileDTO>("/api/profile", { method: "PUT", body: JSON.stringify(data) }),
+  updateStudentName: (id: string, name: string) =>
+    req<{ id: string; name: string }>(`/api/students/${id}`, {
+      method: "PUT",
+      body: JSON.stringify({ name }),
+    }),
 
   // ---- subjects ----
   listSubjects: () =>
@@ -119,6 +124,34 @@ export const api = {
     data: Partial<{ text: string; options: string[]; correctAnswer: string; explanation: string; points: number }>
   ) => req<QuestionLite>(`/api/questions/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   deleteQuestion: (id: string) => req<{ ok: boolean }>(`/api/questions/${id}`, { method: "DELETE" }),
+
+  // ---- generate from references ----
+  generateFromReferences: (lessonId: string, generateType: "content" | "questions") =>
+    req<{
+      generated: string;
+      generateType: "content" | "questions";
+      referencesUsed: string[];
+    }>(`/api/lessons/${lessonId}/generate`, {
+      method: "POST",
+      body: JSON.stringify({ generateType }),
+    }),
+
+  // ---- attachments ----
+  listAttachments: (lessonId: string) =>
+    req<import("@/lib/types").AttachmentDTO[]>(`/api/attachments?lessonId=${lessonId}`),
+  uploadAttachment: (lessonId: string, file: File) => {
+    const form = new FormData();
+    form.append("lessonId", lessonId);
+    form.append("file", file);
+    return fetch("/api/upload", { method: "POST", credentials: "include", body: form }).then(async (r) => {
+      const text = await r.text();
+      const data = text ? JSON.parse(text) : null;
+      if (!r.ok) throw new Error((data && data.error) || `Upload failed: ${r.status}`);
+      return data as import("@/lib/types").AttachmentDTO;
+    });
+  },
+  deleteAttachment: (id: string) =>
+    req<{ ok: boolean }>(`/api/attachments/${id}`, { method: "DELETE" }),
 
   // ---- sessions ----
   startSession: (lessonId: string) =>

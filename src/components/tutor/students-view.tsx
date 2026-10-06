@@ -1,13 +1,15 @@
 "use client";
 
-import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Users,
   Brain,
   BookOpen,
   Clock,
   TrendingUp,
+  Pencil,
+  Loader2,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import {
@@ -36,11 +38,41 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatRelative } from "@/lib/ui";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 export function StudentsView() {
+  const queryClient = useQueryClient();
+  const [editingStudent, setEditingStudent] = useState<{ id: string; name: string } | null>(null);
+  const [studentName, setStudentName] = useState("");
+
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["tutor-dashboard"],
     queryFn: () => api.getTutorDashboard(),
+  });
+
+  const updateNameMutation = useMutation({
+    mutationFn: ({ id, name }: { id: string; name: string }) =>
+      api.updateStudentName(id, name),
+    onSuccess: async () => {
+      toast.success("Nama siswa berhasil diperbarui");
+      setEditingStudent(null);
+      await queryClient.invalidateQueries({ queryKey: ["tutor-dashboard"] });
+      await queryClient.invalidateQueries({ queryKey: ["tutor-analytics"] });
+    },
+    onError: (mutationError: Error) => {
+      toast.error(mutationError.message || "Gagal memperbarui nama siswa");
+    },
   });
 
   const summary = useMemo(() => {
@@ -65,6 +97,18 @@ export function StudentsView() {
   if (!data) return null;
 
   const students = data.recentStudents;
+
+  function openNameEditor(student: { id: string; name: string }) {
+    setEditingStudent(student);
+    setStudentName(student.name);
+  }
+
+  function handleNameSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const name = studentName.trim();
+    if (!editingStudent || !name) return;
+    updateNameMutation.mutate({ id: editingStudent.id, name });
+  }
 
   return (
     <div className="space-y-6">
@@ -163,6 +207,17 @@ export function StudentsView() {
                                     {s.email}
                                   </p>
                                 </div>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="shrink-0"
+                                  aria-label={`Edit nama ${s.name}`}
+                                  title="Edit nama siswa"
+                                  onClick={() => openNameEditor(s)}
+                                >
+                                  <Pencil className="w-4 h-4" />
+                                </Button>
                               </div>
                             </TableCell>
                             <TableCell className="text-center tabular-nums">
@@ -212,6 +267,17 @@ export function StudentsView() {
                               {s.email}
                             </p>
                           </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="shrink-0"
+                            aria-label={`Edit nama ${s.name}`}
+                            title="Edit nama siswa"
+                            onClick={() => openNameEditor(s)}
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </Button>
                           <Badge variant="outline" className="shrink-0">
                             {formatRelative(s.lastActive)}
                           </Badge>
@@ -247,6 +313,56 @@ export function StudentsView() {
           </CardContent>
         </Card>
       </section>
+
+      <Dialog
+        open={editingStudent !== null}
+        onOpenChange={(open) => {
+          if (!open && !updateNameMutation.isPending) setEditingStudent(null);
+        }}
+      >
+        <DialogContent>
+          <form onSubmit={handleNameSubmit} className="space-y-5">
+            <DialogHeader>
+              <DialogTitle>Edit nama siswa</DialogTitle>
+              <DialogDescription>
+                Perubahan nama akan digunakan di tampilan aplikasi.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-2">
+              <Label htmlFor="student-name">Nama</Label>
+              <Input
+                id="student-name"
+                value={studentName}
+                onChange={(event) => setStudentName(event.target.value)}
+                maxLength={100}
+                autoComplete="name"
+                required
+              />
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={updateNameMutation.isPending}
+                onClick={() => setEditingStudent(null)}
+              >
+                Batal
+              </Button>
+              <Button
+                type="submit"
+                disabled={updateNameMutation.isPending || !studentName.trim()}
+              >
+                {updateNameMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Pencil className="w-4 h-4" />
+                )}
+                Simpan Nama
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSession, signOut } from "next-auth/react";
-import { useRouter } from "next/navigation";
 import { User, Save, Loader2, GraduationCap, Target, Phone, ImageOff, LogOut } from "lucide-react";
 import { api } from "@/lib/api";
 import { useNav } from "@/lib/store";
@@ -51,7 +50,6 @@ const EDUCATION_LEVELS = ["SD", "SMP", "SMA", "Kuliah"];
 export function ProfileView() {
   const { data: session } = useSession();
   const userName = session?.user?.name ?? "Siswa";
-  const router = useRouter();
   const reset = useNav((s) => s.reset);
 
   const { data, isLoading, isError, error } = useQuery({
@@ -74,9 +72,9 @@ export function ProfileView() {
   if (isError) return <ErrorState message={error?.message ?? "Gagal memuat profil"} />;
   if (!data) return null;
 
-  function handleLogout() {
+  async function handleLogout() {
     reset();
-    signOut({ redirect: false }).then(() => router.refresh());
+    await signOut({ callbackUrl: "/" });
   }
 
   return (

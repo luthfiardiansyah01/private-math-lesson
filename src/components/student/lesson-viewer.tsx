@@ -13,6 +13,9 @@ import {
   FileText,
   Loader2,
   BookOpen,
+  Paperclip,
+  Download,
+  Image,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import {
@@ -178,6 +181,47 @@ export function LessonViewer() {
             completion={completion}
             subjectColor={subject.color}
           />
+
+          {(lesson.attachments ?? []).length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Paperclip className="w-4 h-4 text-primary" />
+                  Materi Lampiran
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ul className="space-y-2">
+                  {(lesson.attachments ?? []).map((a) => {
+                    const isImage = a.mimeType.startsWith("image/");
+                    const Icon = isImage ? Image : FileText;
+                    const sizeKb = a.sizeBytes < 1024 * 1024
+                      ? `${(a.sizeBytes / 1024).toFixed(0)} KB`
+                      : `${(a.sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
+                    return (
+                      <li key={a.id} className="flex items-center gap-3 rounded-lg border p-3">
+                        <Icon className="w-5 h-5 text-muted-foreground shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{a.filename}</p>
+                          <p className="text-xs text-muted-foreground">{sizeKb}</p>
+                        </div>
+                        <a
+                          href={`/uploads/${a.storedName}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          <Button variant="outline" size="sm" className="shrink-0 gap-1.5">
+                            <Download className="w-3.5 h-3.5" />
+                            Buka
+                          </Button>
+                        </a>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </CardContent>
+            </Card>
+          )}
 
           <Card>
             <CardHeader>

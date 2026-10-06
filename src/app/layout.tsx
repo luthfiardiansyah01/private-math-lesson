@@ -16,10 +16,10 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "EduTrack — Learning Management System",
+  title: "Private Math Lesson",
   description: "Sistem pembelajaran dan tracking progress untuk Student & Tutor.",
   icons: {
-    icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
+    icon: "/hikari-bridge-logo.svg",
   },
 };
 
