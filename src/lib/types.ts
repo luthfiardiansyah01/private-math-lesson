@@ -1,6 +1,8 @@
 // Shared API contracts between frontend and backend
 
 export type Role = "STUDENT" | "TUTOR" | "PARENT";
+export type AppVersion = "KIDS" | "TEENS" | "ADULTS";
+export type Grade = "VII" | "VIII" | "IX" | "X" | "XI" | "XII";
 
 export type ProgressStatus = "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED";
 
@@ -12,6 +14,8 @@ export interface RegisterPayload {
   email: string;
   password: string;
   role: Role;
+  appVersion?: AppVersion;
+  grade?: Grade;
 }
 
 export interface RegisterResponse {
@@ -47,6 +51,7 @@ export interface QuestionDTO {
   correctAnswer: string;
   explanation: string | null;
   points: number;
+  difficulty: "EASY" | "MEDIUM" | "HARD";
   order: number;
 }
 
@@ -54,6 +59,8 @@ export interface ExerciseDTO {
   id: string;
   title: string;
   type: ExerciseType;
+  quizType: "REGULAR" | "PENGAYAAN" | "REMEDIAL";
+  kkm: number;
   lessonId: string;
   questions: QuestionDTO[];
 }
@@ -145,6 +152,11 @@ export interface AttemptResultDTO {
   totalPoints: number;
   percentage: number;
   passed: boolean;
+  kkm: number;
+  routedTo: "PENGAYAAN" | "REMEDIAL" | null;
+  pointsEarned: number;
+  attemptNo: number;
+  bonusMultiplier: number;
   details: {
     questionId: string;
     correct: boolean;

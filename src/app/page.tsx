@@ -21,7 +21,7 @@ export default async function Home() {
   // Fetch the freshest user record (name may have changed) — lightweight query.
   const dbUser = await db.user.findUnique({
     where: { id: u.id },
-    select: { id: true, name: true, email: true, role: true },
+    select: { id: true, name: true, email: true, role: true, appVersion: true, grade: true },
   });
 
   if (!dbUser) {
@@ -33,6 +33,8 @@ export default async function Home() {
     name: dbUser.name,
     email: dbUser.email,
     role: dbUser.role as "STUDENT" | "TUTOR" | "PARENT",
+    appVersion: (dbUser.appVersion ?? "TEENS") as "KIDS" | "TEENS" | "ADULTS",
+    grade: dbUser.grade,
   };
 
   return (

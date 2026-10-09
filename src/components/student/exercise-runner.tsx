@@ -5,14 +5,10 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
   CheckCircle2,
-  XCircle,
   Loader2,
-  RotateCcw,
-  Trophy,
-  AlertCircle,
   FileText,
+  Target,
 } from "lucide-react";
-import ReactMarkdown from "react-markdown";
 import { api } from "@/lib/api";
 import { useNav } from "@/lib/store";
 import {
@@ -25,11 +21,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import { colorClasses } from "@/lib/ui";
+import { QuizResult } from "@/components/student/quiz-result";
 import type {
   SubjectDTO,
   ExerciseDTO,
@@ -100,13 +96,22 @@ export function ExerciseRunner() {
       qc.invalidateQueries({ queryKey: ["student-dashboard"] });
       qc.invalidateQueries({ queryKey: ["progress"] });
       qc.invalidateQueries({ queryKey: ["mastery"] });
+      qc.invalidateQueries({ queryKey: ["student-stats"] });
       if (res.passed) {
-        toast.success(`Lulus! Skor ${Math.round(res.percentage)}%`);
+        toast.success(`Lulus! Skor ${res.percentage}% · +${res.pointsEarned} poin`);
       } else {
-        toast.error(`Belum lulus. Skor ${Math.round(res.percentage)}%`);
+        toast.error(`Belum lulus. Skor ${res.percentage}% (KKM: ${res.kkm})`);
       }
     },
-    onError: (e: Error) => toast.error(e.message || "Gagal mengumpulkan jawaban"),
+    onError: (e: any) => {
+      if (e?.response?.data?.error === "COOLDOWN") {
+        const wait = e?.response?.data?.waitSec ?? 300;
+        const m = Math.ceil(wait / 60);
+        toast.error(`Masih dalam cooldown. Coba lagi dalam ${m} menit.`);
+      } else {
+        toast.error(e.message || "Gagal mengumpulkan jawaban");
+      }
+    },
   });
 
   if (isLoading) return <LoadingGrid count={3} />;
@@ -174,20 +179,30 @@ export function ExerciseRunner() {
               {exercise.title}
             </h1>
             <Badge variant="outline">{exercise.type.replace("_", " ")}</Badge>
+            {(exercise as any).quizType && (exercise as any).quizType !== "REGULAR" && (
+              <Badge className="bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300">
+                {(exercise as any).quizType}
+              </Badge>
+            )}
           </div>
-          <p className="text-muted-foreground mt-1 text-sm">
+          <p className="text-muted-foreground mt-1 text-sm flex items-center gap-2">
             {questions.length} soal · {subject.title}
+            {(exercise as any).kkm && (
+              <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 dark:text-amber-400">
+                <Target className="w-3 h-3" /> KKM {(exercise as any).kkm}
+              </span>
+            )}
           </p>
         </div>
       </div>
 
       {submitted && result ? (
-        <ResultView
+        <QuizResult
           result={result}
-          questions={questions}
-          answers={answers}
-          onReset={handleReset}
-          onDone={handleBackToLesson}
+          exerciseTitle={exercise.title}
+          onRetry={handleReset}
+          onNext={handleBackToLesson}
+          onBack={handleBackToLesson}
         />
       ) : (
         <Card>
@@ -293,166 +308,6 @@ function QuestionCard({
             onChange={(e) => onChange(e.target.value)}
           />
         )}
-      </div>
-    </div>
-  );
-}
-
-function ResultView({
-  result,
-  questions,
-  answers,
-  onReset,
-  onDone,
-}: {
-  result: AttemptResultDTO;
-  questions: QuestionDTO[];
-  answers: Record<string, string>;
-  onReset: () => void;
-  onDone: () => void;
-}) {
-  const passed = result.passed;
-  const detailByQuestion = new Map(result.details.map((d) => [d.questionId, d]));
-
-  return (
-    <div className="space-y-6">
-      <Card
-        className={
-          passed
-            ? "border-emerald-200 dark:border-emerald-800"
-            : "border-rose-200 dark:border-rose-800"
-        }
-      >
-        <CardContent className="pt-6">
-          <div className="flex items-center gap-4">
-            <div
-              className={`w-14 h-14 rounded-full flex items-center justify-center shrink-0 ${
-                passed
-                  ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400"
-                  : "bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-400"
-              }`}
-            >
-              {passed ? (
-                <Trophy className="w-7 h-7" />
-              ) : (
-                <AlertCircle className="w-7 h-7" />
-              )}
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="text-xl font-bold">
-                  {Math.round(result.percentage)}%
-                </h2>
-                <Badge
-                  className={
-                    passed
-                      ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
-                      : "bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300"
-                  }
-                >
-                  {passed ? "Lulus" : "Belum Lulus"}
-                </Badge>
-              </div>
-              <p className="text-sm text-muted-foreground mt-0.5">
-                Skor {result.score}/{result.totalPoints} poin · Minimum lulus 70%
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <div>
-        <h3 className="font-semibold mb-3 text-lg">Pembahasan Jawaban</h3>
-        <div className="space-y-3">
-          {questions.map((q, idx) => {
-            const d = detailByQuestion.get(q.id);
-            const correct = d?.correct ?? false;
-            const yourAns = d?.yourAnswer ?? answers[q.id] ?? "—";
-            return (
-              <Card
-                key={q.id}
-                className={
-                  correct
-                    ? "border-emerald-200 dark:border-emerald-800"
-                    : "border-rose-200 dark:border-rose-800"
-                }
-              >
-                <CardContent className="pt-5 space-y-3">
-                  <div className="flex items-start gap-3">
-                    <div
-                      className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${
-                        correct
-                          ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400"
-                          : "bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-400"
-                      }`}
-                    >
-                      {correct ? (
-                        <CheckCircle2 className="w-4 h-4" />
-                      ) : (
-                        <XCircle className="w-4 h-4" />
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium">
-                        <span className="text-muted-foreground mr-1.5">
-                          {idx + 1}.
-                        </span>
-                        {q.text}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="pl-10 space-y-1.5 text-sm">
-                    <div className="flex items-start gap-2">
-                      <span className="text-muted-foreground shrink-0 w-20">
-                        Jawabanmu:
-                      </span>
-                      <span
-                        className={
-                          correct
-                            ? "font-medium text-emerald-600 dark:text-emerald-400"
-                            : "font-medium text-rose-600 dark:text-rose-400"
-                        }
-                      >
-                        {yourAns || "—"}
-                      </span>
-                    </div>
-                    {!correct && (
-                      <div className="flex items-start gap-2">
-                        <span className="text-muted-foreground shrink-0 w-20">
-                          Jawaban benar:
-                        </span>
-                        <span className="font-medium text-emerald-600 dark:text-emerald-400">
-                          {d?.correctAnswer ?? "—"}
-                        </span>
-                      </div>
-                    )}
-                    {d?.explanation && (
-                      <div className="mt-2 pt-2 border-t">
-                        <p className="text-muted-foreground text-xs uppercase tracking-wide mb-1">
-                          Pembahasan
-                        </p>
-                        <div className="prose-edu text-sm">
-                          <ReactMarkdown>{d.explanation}</ReactMarkdown>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="flex items-center justify-end gap-2 flex-wrap">
-        <Button variant="outline" onClick={onReset}>
-          <RotateCcw className="w-4 h-4" />
-          Ulangi Latihan
-        </Button>
-        <Button onClick={onDone}>
-          <CheckCircle2 className="w-4 h-4" />
-          Selesai
-        </Button>
       </div>
     </div>
   );

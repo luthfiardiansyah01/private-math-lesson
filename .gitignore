@@ -52,3 +52,9 @@ prompt
 server.log
 # Skills directory
 /skills/
+
+# Capacitor - www placeholder tidak perlu di-commit
+www/
+
+# Android generated files (opsional: uncomment jika tidak mau commit android/)
+# /android/

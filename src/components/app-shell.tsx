@@ -171,8 +171,17 @@ export function AppShell({ user, children }: AppShellProps) {
     .join("")
     .toUpperCase();
 
+  const versionLabel =
+    user.appVersion === "KIDS"
+      ? "Kids"
+      : user.appVersion === "ADULTS"
+      ? "Adults"
+      : "Teens";
+
+  const gradeLabel = user.grade ? ` · Kelas ${user.grade}` : "";
+
   const roleLabel = isStudent
-    ? "Student"
+    ? `Student ${versionLabel}${gradeLabel}`
     : isParent
     ? "Orang Tua"
     : "Tutor";

@@ -7,6 +7,8 @@ export type SessionUser = {
   email: string;
   name: string;
   role: "STUDENT" | "TUTOR" | "PARENT";
+  appVersion: "KIDS" | "TEENS" | "ADULTS";
+  grade: string | null;
 };
 
 export async function getCurrentUser(): Promise<SessionUser | null> {
@@ -19,6 +21,8 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
     email: u.email!,
     name: u.name!,
     role: u.role,
+    appVersion: u.appVersion ?? "TEENS",
+    grade: u.grade ?? null,
   };
 }
 

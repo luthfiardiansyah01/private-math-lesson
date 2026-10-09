@@ -24,13 +24,22 @@ export async function PUT(
 
   try {
     const body = await req.json();
-    const data: Record<string, string> = {};
+    const data: Record<string, string | number> = {};
     if ("title" in body && typeof body.title === "string") data.title = body.title;
     if ("type" in body && typeof body.type === "string") {
       if (!["MCQ", "TRUE_FALSE", "SHORT_ANSWER"].includes(body.type)) {
         return Response.json({ error: "Invalid type" }, { status: 400 });
       }
       data.type = body.type;
+    }
+    if ("quizType" in body && typeof body.quizType === "string") {
+      if (!["REGULAR", "PENGAYAAN", "REMEDIAL"].includes(body.quizType)) {
+        return Response.json({ error: "Invalid quizType" }, { status: 400 });
+      }
+      data.quizType = body.quizType;
+    }
+    if ("kkm" in body && typeof body.kkm === "number" && body.kkm >= 0 && body.kkm <= 100) {
+      data.kkm = body.kkm;
     }
 
     if (Object.keys(data).length === 0) {

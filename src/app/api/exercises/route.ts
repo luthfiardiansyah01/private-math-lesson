@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { requireTutor } from "@/lib/auth";
 
 const VALID_TYPES = new Set(["MCQ", "TRUE_FALSE", "SHORT_ANSWER"]);
+const VALID_QUIZ_TYPES = new Set(["REGULAR", "PENGAYAAN", "REMEDIAL"]);
 
 export async function POST(req: NextRequest) {
   const auth = await requireTutor();
@@ -11,7 +12,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { lessonId, title, type } = body ?? {};
+    const { lessonId, title, type, quizType, kkm } = body ?? {};
 
     if (!lessonId || !title || typeof title !== "string") {
       return Response.json({ error: "lessonId and title are required" }, { status: 400 });
@@ -31,10 +32,15 @@ export async function POST(req: NextRequest) {
       return Response.json({ error: "Not found" }, { status: 404 });
     }
 
+    const resolvedQuizType = quizType && VALID_QUIZ_TYPES.has(quizType) ? quizType : "REGULAR";
+    const resolvedKkm = typeof kkm === "number" && kkm >= 0 && kkm <= 100 ? kkm : 75;
+
     const exercise = await db.exercise.create({
       data: {
         title: title.trim(),
         type,
+        quizType: resolvedQuizType,
+        kkm: resolvedKkm,
         lessonId,
       },
     });

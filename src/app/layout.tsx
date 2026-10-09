@@ -16,8 +16,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Private Math Lesson",
-  description: "Sistem pembelajaran dan tracking progress untuk Student & Tutor.",
+  title: "HIKABRIDGE — Private Math Lesson",
+  description: "Platform les matematika privat untuk SMP & SMA. Materi terstruktur, quiz adaptif, dan tracking progress.",
   icons: {
     icon: "/hikari-bridge-logo.svg",
   },

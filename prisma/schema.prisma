@@ -15,6 +15,8 @@ model User {
   name         String
   passwordHash String
   role         String   @default("STUDENT") // STUDENT | TUTOR | PARENT
+  appVersion   String   @default("TEENS")   // KIDS | TEENS | ADULTS
+  grade        String?                       // e.g. "IX" (Grade 9 SMP)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -107,6 +109,7 @@ model StudentStats {
   studentId      String   @unique
   student        User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
   totalXP        Int      @default(0)
+  totalPoints    Int      @default(0)  // kumulatif poin dari quiz exercise
   level          Int      @default(1)
   currentStreak  Int      @default(0)
   longestStreak  Int      @default(0)
@@ -184,6 +187,9 @@ model Profile {
   targetExam     String? // e.g. UTBK, SNBT, UAS
   studyGoals     String?
   phone          String?
+  schoolName     String?
+  parentName     String?
+  parentPhone    String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 }
@@ -237,6 +243,8 @@ model Exercise {
   id        String   @id @default(cuid())
   title     String
   type      String   @default("MCQ") // MCQ | TRUE_FALSE | SHORT_ANSWER
+  quizType  String   @default("REGULAR") // REGULAR | PENGAYAAN | REMEDIAL
+  kkm       Int      @default(75)         // KKM threshold 0-100
   lessonId  String
   lesson    Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
   questions Question[]
@@ -253,8 +261,20 @@ model Question {
   options       String? // JSON array of strings (for MCQ)
   correctAnswer String
   explanation   String?
-  points        Int      @default(1)
+  points        Int      @default(10)  // bobot poin per soal
+  difficulty    String   @default("MEDIUM") // EASY | MEDIUM | HARD
   order         Int      @default(0)
+}
+
+model QuizCooldown {
+  id          String   @id @default(cuid())
+  studentId   String
+  exerciseId  String
+  availableAt DateTime
+  createdAt   DateTime @default(now())
+
+  @@unique([studentId, exerciseId])
+  @@index([studentId])
 }
 
 model LearningSession {
@@ -314,15 +334,20 @@ model LessonAttachment {
 }
 
 model ExerciseAttempt {
-  id          String   @id @default(cuid())
-  studentId   String
-  student     User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  exerciseId  String
-  exercise    Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
-  answers     String   // JSON of { questionId: answer }
-  score       Int      @default(0)
-  totalPoints Int      @default(0)
-  percentage  Int      @default(0)
-  passed      Boolean  @default(false)
-  createdAt   DateTime @default(now())
+  id           String   @id @default(cuid())
+  studentId    String
+  student      User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  exerciseId   String
+  exercise     Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  answers      String   // JSON of { questionId: answer }
+  score        Int      @default(0)
+  totalPoints  Int      @default(0)
+  percentage   Int      @default(0)
+  pointsEarned Int      @default(0)  // actual points added to student total
+  passed       Boolean  @default(false)
+  routedTo     String?               // PENGAYAAN | REMEDIAL | null
+  attemptNo    Int      @default(1)  // attempt number for this exercise
+  createdAt    DateTime @default(now())
+
+  @@index([studentId, exerciseId])
 }

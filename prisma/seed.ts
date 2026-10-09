@@ -46,6 +46,7 @@ async function main() {
       email: "tutor@hikari.id",
       name: "Tutor Demo",
       role: "TUTOR",
+      appVersion: "TEENS",
       passwordHash: hashPassword("tutor123"),
     },
   });
@@ -55,6 +56,8 @@ async function main() {
       email: "student@hikari.id",
       name: "Siswa Demo",
       role: "STUDENT",
+      appVersion: "TEENS",
+      grade: "IX",
       passwordHash: hashPassword("student123"),
     },
   });

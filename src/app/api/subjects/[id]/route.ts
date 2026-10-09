@@ -48,6 +48,8 @@ function mapSubject(s: any): SubjectDTO {
                 id: e.id,
                 title: e.title,
                 type: e.type,
+                quizType: e.quizType ?? "REGULAR",
+                kkm: e.kkm ?? 75,
                 lessonId: e.lessonId,
                 questions: (e.questions ?? [])
                   .slice()
@@ -59,6 +61,7 @@ function mapSubject(s: any): SubjectDTO {
                     correctAnswer: q.correctAnswer,
                     explanation: q.explanation,
                     points: q.points,
+                    difficulty: q.difficulty ?? "MEDIUM",
                     order: q.order,
                   })),
               })),

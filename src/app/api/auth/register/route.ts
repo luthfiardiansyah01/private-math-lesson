@@ -3,11 +3,13 @@ import { db } from "@/lib/db";
 import { hashPassword } from "@/lib/password";
 
 const VALID_ROLES = new Set(["STUDENT", "TUTOR", "PARENT"]);
+const VALID_VERSIONS = new Set(["KIDS", "TEENS", "ADULTS"]);
+const VALID_GRADES = new Set(["VII", "VIII", "IX", "X", "XI", "XII"]);
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { name, email, password, role } = body ?? {};
+    const { name, email, password, role, appVersion, grade } = body ?? {};
 
     if (!name || !email || !password || !role) {
       return Response.json(
@@ -29,6 +31,9 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
+
+    const resolvedVersion = appVersion && VALID_VERSIONS.has(appVersion) ? appVersion : "TEENS";
+    const resolvedGrade = grade && VALID_GRADES.has(grade) ? grade : null;
 
     if (password.length < 6) {
       return Response.json(
@@ -55,6 +60,8 @@ export async function POST(req: NextRequest) {
         email: normalizedEmail,
         passwordHash,
         role,
+        appVersion: resolvedVersion,
+        grade: resolvedGrade,
       },
     });
 

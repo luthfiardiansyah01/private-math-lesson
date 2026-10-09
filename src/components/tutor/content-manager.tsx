@@ -1012,7 +1012,7 @@ function LessonDetailLevel({ subjectId, lessonId }: { subjectId: string; lessonI
   });
 
   const createExerciseMut = useMutation({
-    mutationFn: (v: { lessonId: string; title: string; type: string }) =>
+    mutationFn: (v: { lessonId: string; title: string; type: string; quizType: string; kkm: number }) =>
       api.createExercise(v),
     onSuccess: () => {
       toast.success("Latihan dibuat");
@@ -1023,7 +1023,7 @@ function LessonDetailLevel({ subjectId, lessonId }: { subjectId: string; lessonI
   });
 
   const updateExerciseMut = useMutation({
-    mutationFn: (args: { id: string; data: Partial<{ title: string; type: string }> }) =>
+    mutationFn: (args: { id: string; data: Partial<{ title: string; type: string; quizType: string; kkm: number }> }) =>
       api.updateExercise(args.id, args.data),
     onSuccess: () => {
       toast.success("Latihan diperbarui");
@@ -1153,11 +1153,11 @@ function LessonDetailLevel({ subjectId, lessonId }: { subjectId: string; lessonI
   const hasAttachments = (lesson.attachments?.length ?? 0) > 0;
   const c = colorClasses(subject.color);
 
-  const handleExerciseSubmit = (v: { title: string; type: ExerciseType }) => {
+  const handleExerciseSubmit = (v: { title: string; type: ExerciseType; quizType: string; kkm: number }) => {
     if (editingExercise) {
-      updateExerciseMut.mutate({ id: editingExercise.id, data: { title: v.title, type: v.type } });
+      updateExerciseMut.mutate({ id: editingExercise.id, data: { title: v.title, type: v.type, quizType: v.quizType, kkm: v.kkm } });
     } else {
-      createExerciseMut.mutate({ lessonId: lesson.id, title: v.title, type: v.type });
+      createExerciseMut.mutate({ lessonId: lesson.id, title: v.title, type: v.type, quizType: v.quizType, kkm: v.kkm });
     }
   };
 
@@ -1369,7 +1369,7 @@ function LessonDetailLevel({ subjectId, lessonId }: { subjectId: string; lessonI
         }}
         initial={
           editingExercise
-            ? { title: editingExercise.title, type: editingExercise.type as ExerciseType }
+            ? { title: editingExercise.title, type: editingExercise.type as ExerciseType, quizType: editingExercise.quizType, kkm: editingExercise.kkm }
             : undefined
         }
         onSubmit={handleExerciseSubmit}
@@ -2315,8 +2315,8 @@ function ExerciseFormDialog({
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
-  initial?: { title: string; type: ExerciseType };
-  onSubmit: (v: { title: string; type: ExerciseType }) => void;
+  initial?: { title: string; type: ExerciseType; quizType?: string; kkm?: number };
+  onSubmit: (v: { title: string; type: ExerciseType; quizType: string; kkm: number }) => void;
   submitting: boolean;
 }) {
   return (
@@ -2334,24 +2334,32 @@ function ExerciseFormDialog({
   );
 }
 
+const QUIZ_TYPES = [
+  { value: "REGULAR", label: "Regular", desc: "Latihan biasa" },
+  { value: "PENGAYAAN", label: "Pengayaan", desc: "Soal lebih menantang (di atas KKM)" },
+  { value: "REMEDIAL", label: "Remedial", desc: "Soal penguatan (di bawah KKM)" },
+];
+
 function ExerciseForm({
   initial,
   onSubmit,
   submitting,
 }: {
-  initial?: { title: string; type: ExerciseType };
-  onSubmit: (v: { title: string; type: ExerciseType }) => void;
+  initial?: { title: string; type: ExerciseType; quizType?: string; kkm?: number };
+  onSubmit: (v: { title: string; type: ExerciseType; quizType: string; kkm: number }) => void;
   submitting: boolean;
 }) {
   const [title, setTitle] = useState(() => initial?.title ?? "");
   const [type, setType] = useState<ExerciseType>(() => initial?.type ?? "MCQ");
+  const [quizType, setQuizType] = useState(() => initial?.quizType ?? "REGULAR");
+  const [kkm, setKkm] = useState(() => String(initial?.kkm ?? 75));
 
   return (
     <>
       <DialogHeader>
         <DialogTitle>{initial ? "Edit Latihan" : "Tambah Latihan"}</DialogTitle>
         <DialogDescription>
-          Latihan berisi kumpulan soal untuk menguji pemahaman.
+          Atur tipe, KKM, dan jenis quiz untuk sistem Pengayaan/Remedial.
         </DialogDescription>
       </DialogHeader>
       <div className="space-y-4">
@@ -2364,8 +2372,41 @@ function ExerciseForm({
             placeholder="cth. Latihan Pertidaksamaan Linear"
           />
         </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <Label>Jenis Quiz</Label>
+            <Select value={quizType} onValueChange={setQuizType}>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {QUIZ_TYPES.map((qt) => (
+                  <SelectItem key={qt.value} value={qt.value}>
+                    {qt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              {QUIZ_TYPES.find((qt) => qt.value === quizType)?.desc}
+            </p>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="ex-kkm">KKM (%)</Label>
+            <Input
+              id="ex-kkm"
+              type="number"
+              min={0}
+              max={100}
+              value={kkm}
+              onChange={(e) => setKkm(e.target.value)}
+              placeholder="75"
+            />
+            <p className="text-xs text-muted-foreground">Nilai minimum lulus</p>
+          </div>
+        </div>
         <div className="space-y-1.5">
-          <Label>Tipe Latihan</Label>
+          <Label>Tipe Soal</Label>
           <Select value={type} onValueChange={(v) => setType(v as ExerciseType)}>
             <SelectTrigger className="w-full">
               <SelectValue />
@@ -2387,7 +2428,7 @@ function ExerciseForm({
           </Button>
         </DialogClose>
         <Button
-          onClick={() => onSubmit({ title: title.trim(), type })}
+          onClick={() => onSubmit({ title: title.trim(), type, quizType, kkm: parseInt(kkm, 10) || 75 })}
           disabled={!title.trim() || submitting}
         >
           {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
