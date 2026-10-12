@@ -50,6 +50,7 @@ export interface QuestionDTO {
   options: string[] | null;
   correctAnswer: string;
   explanation: string | null;
+  imageUrl: string | null;
   points: number;
   difficulty: "EASY" | "MEDIUM" | "HARD";
   order: number;

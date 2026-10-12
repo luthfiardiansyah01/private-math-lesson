@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
@@ -250,6 +250,36 @@ export function ExerciseRunner() {
   );
 }
 
+// Loads MathJax once when this module mounts (no-op if already loaded).
+let mathJaxLoaded = false;
+function useMathJax(deps: unknown[]) {
+  useEffect(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const w = window as any;
+    const typeset = () => { if (w.MathJax?.typesetPromise) w.MathJax.typesetPromise().catch(() => {}); };
+    if (mathJaxLoaded) { typeset(); return; }
+    w.MathJax = { tex: { inlineMath: [["$", "$"]] }, startup: { ready() { w.MathJax.startup.defaultReady(); w.MathJax.startup.promise.then(typeset); } } };
+    const script = document.createElement("script");
+    script.src = "https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-chtml.min.js";
+    script.async = true;
+    script.onload = () => { mathJaxLoaded = true; };
+    document.head.appendChild(script);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps);
+}
+
+function MathText({ text, className }: { text: string; className?: string }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    if (!ref.current) return;
+    ref.current.textContent = text;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const w = window as any;
+    if (w.MathJax?.typesetPromise) w.MathJax.typesetPromise([ref.current]).catch(() => {});
+  }, [text]);
+  return <span ref={ref} className={className}>{text}</span>;
+}
+
 function QuestionCard({
   question,
   index,
@@ -267,14 +297,29 @@ function QuestionCard({
   const isTrueFalse = !isMCQ && exerciseType === "TRUE_FALSE";
   const tfOptions = ["Benar", "Salah"];
 
+  // trigger MathJax whenever question changes
+  useMathJax([question.id]);
+
   return (
     <div className="rounded-lg border p-4 space-y-3">
       <div className="flex items-start gap-3">
         <div className="w-7 h-7 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-semibold shrink-0">
           {index + 1}
         </div>
-        <p className="font-medium pt-0.5">{question.text}</p>
+        <MathText text={question.text} className="font-medium pt-0.5" />
       </div>
+
+      {/* Gambar soal */}
+      {question.imageUrl && (
+        <div className="pl-10">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={question.imageUrl}
+            alt={`Gambar soal ${index + 1}`}
+            className="max-h-60 rounded-lg border object-contain bg-muted/20"
+          />
+        </div>
+      )}
 
       <div className="pl-10">
         {isMCQ ? (
@@ -285,7 +330,7 @@ function QuestionCard({
                 className="flex items-center gap-2.5 rounded-md border p-2.5 cursor-pointer hover:bg-accent/50 transition-colors has-[:checked]:bg-accent"
               >
                 <RadioGroupItem value={opt} id={`${question.id}-${i}`} />
-                <span className="text-sm">{opt}</span>
+                <MathText text={opt} className="text-sm" />
               </label>
             ))}
           </RadioGroup>

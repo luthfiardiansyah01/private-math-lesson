@@ -5,8 +5,9 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model User {
@@ -34,6 +35,9 @@ model User {
   // Parent relationships
   childrenLinks    ParentLink[]   @relation("ParentLinks")
   parentLinks      ParentLink[]   @relation("StudentLinks")
+  // Attendance
+  attendancesAsTutor   Attendance[] @relation("TutorAttendance")
+  attendancesAsStudent Attendance[] @relation("StudentAttendance")
 }
 
 // ===== Phase 3: Intelligence & Reporting =====
@@ -205,8 +209,42 @@ model Subject {
   topics      Topic[]
   mastery     Mastery[]
   masteryHistory MasteryHistory[]
+  references  SubjectReference[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+// ===== Referensi Buku per-Subject =====
+
+model SubjectReference {
+  id          String   @id @default(cuid())
+  subjectId   String
+  subject     Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  title       String   // judul buku / nama referensi
+  storedName  String   // nama file di disk
+  filename    String   // nama asli file
+  sizeBytes   Int
+  status      String   @default("PROCESSING") // PROCESSING | READY | ERROR
+  errorMsg    String?
+  chapters    ReferenceChapter[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([subjectId])
+}
+
+model ReferenceChapter {
+  id          String           @id @default(cuid())
+  referenceId String
+  reference   SubjectReference @relation(fields: [referenceId], references: [id], onDelete: Cascade)
+  title       String           // judul bab: "Bab 1: Persamaan Linear"
+  order       Int              @default(0)
+  content     String           // teks konten bab (digunakan saat generate soal)
+  pageStart   Int?
+  pageEnd     Int?
+  createdAt   DateTime         @default(now())
+
+  @@index([referenceId])
 }
 
 model Topic {
@@ -261,6 +299,7 @@ model Question {
   options       String? // JSON array of strings (for MCQ)
   correctAnswer String
   explanation   String?
+  imageUrl      String? // path to uploaded image e.g. /uploads/questions/xxx.jpg
   points        Int      @default(10)  // bobot poin per soal
   difficulty    String   @default("MEDIUM") // EASY | MEDIUM | HARD
   order         Int      @default(0)
@@ -331,6 +370,40 @@ model LessonAttachment {
   createdAt   DateTime @default(now())
 
   @@index([lessonId])
+}
+
+// ===== Phase 3: Attendance System =====
+
+model Attendance {
+  id          String   @id @default(cuid())
+  tutorId     String
+  tutor       User     @relation("TutorAttendance", fields: [tutorId], references: [id], onDelete: Cascade)
+  studentId   String
+  student     User     @relation("StudentAttendance", fields: [studentId], references: [id], onDelete: Cascade)
+  date        String   // YYYY-MM-DD
+  status      String   @default("PRESENT") // PRESENT | ABSENT | LATE
+  location    String?  // nama lokasi / alamat
+  latitude    Float?
+  longitude   Float?
+  photoUrl    String?  // path ke foto /uploads/attendance/xxx.jpg
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  feedback    AttendanceFeedback?
+
+  @@index([tutorId, date])
+  @@index([studentId, date])
+}
+
+model AttendanceFeedback {
+  id           String     @id @default(cuid())
+  attendanceId String     @unique
+  attendance   Attendance @relation(fields: [attendanceId], references: [id], onDelete: Cascade)
+  mood         String     @default("GOOD") // GREAT | GOOD | OKAY | BAD
+  rating       Int        @default(5)      // 1-5
+  notes        String?
+  createdAt    DateTime   @default(now())
 }
 
 model ExerciseAttempt {

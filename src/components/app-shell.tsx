@@ -16,6 +16,7 @@ import {
   Gamepad2,
   Trophy,
   History,
+  CalendarDays,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -80,6 +81,12 @@ export function AppShell({ user, children }: AppShellProps) {
           short: "Game",
         },
         {
+          key: "attendance",
+          label: "Absensi",
+          icon: CalendarDays,
+          short: "Absensi",
+        },
+        {
           key: "progress",
           label: "Progress Saya",
           icon: BarChart3,
@@ -119,6 +126,12 @@ export function AppShell({ user, children }: AppShellProps) {
           label: "Kelola Materi",
           icon: BookOpen,
           short: "Kelola",
+        },
+        {
+          key: "attendance",
+          label: "Absensi",
+          icon: CalendarDays,
+          short: "Absensi",
         },
         {
           key: "tutorAnalytics",

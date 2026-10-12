@@ -117,11 +117,12 @@ export const api = {
     options?: string[];
     correctAnswer: string;
     explanation?: string;
+    imageUrl?: string | null;
     points?: number;
   }) => req<QuestionLite>("/api/questions", { method: "POST", body: JSON.stringify(data) }),
   updateQuestion: (
     id: string,
-    data: Partial<{ text: string; options: string[]; correctAnswer: string; explanation: string; points: number }>
+    data: Partial<{ text: string; options: string[]; correctAnswer: string; explanation: string; imageUrl: string | null; points: number }>
   ) => req<QuestionLite>(`/api/questions/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   deleteQuestion: (id: string) => req<{ ok: boolean }>(`/api/questions/${id}`, { method: "DELETE" }),
 
@@ -278,6 +279,7 @@ export interface QuestionLite {
   options: string[] | null;
   correctAnswer: string;
   explanation: string | null;
+  imageUrl: string | null;
   points: number;
   order: number;
 }

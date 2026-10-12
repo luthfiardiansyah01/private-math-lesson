@@ -97,6 +97,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { colorClasses, subjectIcon } from "@/lib/ui";
+import { ReferenceManager } from "@/components/tutor/reference-manager";
 import type {
   SubjectDTO,
   TopicDTO,
@@ -665,6 +666,12 @@ function SubjectDetailLevel({ subjectId }: { subjectId: string }) {
         )}
       </section>
 
+      {/* Referensi Buku */}
+      <section className="space-y-3">
+        <Separator />
+        <ReferenceManager subjectId={subjectId} />
+      </section>
+
       {/* Dialogs */}
       <SubjectFormDialog
         open={editOpen}
@@ -962,6 +969,280 @@ function GeneratedQuestionsImporter({
 }
 
 // ============================================================
+// GenerateQuestionsDialog — AI generate soal per exercise
+// ============================================================
+
+interface ChapterOption {
+  id: string;
+  title: string;
+  order: number;
+  referenceTitle: string;
+}
+
+function GenerateQuestionsDialog({
+  exercise,
+  subjectId,
+  onClose,
+  onSuccess,
+}: {
+  exercise: ExerciseDTO | null;
+  subjectId: string;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const [count, setCount] = useState("5");
+  const [difficulty, setDifficulty] = useState("MEDIUM");
+  const [instruction, setInstruction] = useState("");
+  const [selectedChapterIds, setSelectedChapterIds] = useState<Set<string>>(new Set());
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<{ created: number; chaptersUsed: string[] } | null>(null);
+
+  // Load chapters dari semua referensi buku subject ini
+  const { data: refs = [], isLoading: refsLoading } = useQuery<{
+    id: string; title: string; status: string;
+    chapters: { id: string; title: string; order: number }[];
+  }[]>({
+    queryKey: ["references", subjectId],
+    queryFn: () =>
+      fetch(`/api/subjects/${subjectId}/references`).then((r) => r.json()),
+    enabled: !!exercise,
+  });
+
+  const allChapters: ChapterOption[] = refs
+    .filter((r) => r.status === "READY")
+    .flatMap((r) =>
+      r.chapters.map((ch) => ({
+        id: ch.id,
+        title: ch.title,
+        order: ch.order,
+        referenceTitle: r.title,
+      }))
+    );
+
+  function toggleChapter(id: string) {
+    setSelectedChapterIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    if (selectedChapterIds.size === allChapters.length) {
+      setSelectedChapterIds(new Set());
+    } else {
+      setSelectedChapterIds(new Set(allChapters.map((c) => c.id)));
+    }
+  }
+
+  function handleClose() {
+    setResult(null);
+    setInstruction("");
+    setCount("5");
+    setDifficulty("MEDIUM");
+    setSelectedChapterIds(new Set());
+    onClose();
+  }
+
+  async function handleGenerate() {
+    if (!exercise) return;
+    setLoading(true);
+    setResult(null);
+    try {
+      const res = await fetch(`/api/exercises/${exercise.id}/generate-questions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          count: Number(count),
+          difficulty,
+          instruction,
+          chapterIds: [...selectedChapterIds],
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Gagal generate soal");
+      setResult(data);
+      toast.success(`${data.created} soal berhasil digenerate dan disimpan!`);
+      onSuccess();
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Gagal generate soal");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // Group chapters by reference book
+  const grouped = refs
+    .filter((r) => r.status === "READY" && r.chapters.length > 0)
+    .map((r) => ({ ref: r, chapters: r.chapters }));
+
+  return (
+    <Dialog open={!!exercise} onOpenChange={(v) => !v && handleClose()}>
+      <DialogContent className="max-w-lg max-h-[90vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-primary" />
+            Generate Soal AI
+          </DialogTitle>
+          <DialogDescription>
+            {exercise?.title} — pilih bab referensi lalu AI akan membuat soal
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex-1 overflow-y-auto space-y-4 pr-1">
+          {result ? (
+            <div className="space-y-4">
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-center space-y-2">
+                <div className="text-3xl font-bold text-emerald-600">{result.created}</div>
+                <p className="text-sm text-emerald-700 font-medium">soal berhasil digenerate!</p>
+                {result.chaptersUsed.length > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    Dari bab: {result.chaptersUsed.join(", ")}
+                  </p>
+                )}
+              </div>
+              <Button className="w-full" onClick={handleClose}>Selesai</Button>
+            </div>
+          ) : (
+            <>
+              {/* Jumlah soal + Kesulitan */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>Jumlah Soal</Label>
+                  <Select value={count} onValueChange={setCount}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {["5", "10", "15", "20"].map((n) => (
+                        <SelectItem key={n} value={n}>{n} soal</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Tingkat Kesulitan</Label>
+                  <Select value={difficulty} onValueChange={setDifficulty}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="EASY">😊 Mudah</SelectItem>
+                      <SelectItem value="MEDIUM">🎯 Sedang</SelectItem>
+                      <SelectItem value="HARD">🔥 Sulit</SelectItem>
+                      <SelectItem value="MIXED">🌈 Campuran</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Pilih Bab Referensi */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label>Pilih Bab Referensi</Label>
+                  {allChapters.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={toggleAll}
+                      className="text-xs text-primary hover:underline"
+                    >
+                      {selectedChapterIds.size === allChapters.length ? "Batal semua" : "Pilih semua"}
+                    </button>
+                  )}
+                </div>
+
+                {refsLoading ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground py-3 justify-center">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Memuat referensi...
+                  </div>
+                ) : grouped.length === 0 ? (
+                  <div className="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
+                    Belum ada referensi buku yang siap digunakan.
+                    <br />
+                    <span className="text-xs">Upload buku PDF di halaman subject terlebih dahulu.</span>
+                  </div>
+                ) : (
+                  <div className="rounded-lg border divide-y max-h-48 overflow-y-auto">
+                    {grouped.map(({ ref, chapters }) => (
+                      <div key={ref.id}>
+                        <div className="px-3 py-2 bg-muted/30 text-xs font-semibold text-muted-foreground">
+                          📖 {ref.title}
+                        </div>
+                        {chapters.map((ch) => (
+                          <label
+                            key={ch.id}
+                            className="flex items-center gap-3 px-3 py-2 hover:bg-muted/50 cursor-pointer"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selectedChapterIds.has(ch.id)}
+                              onChange={() => toggleChapter(ch.id)}
+                              className="w-4 h-4 accent-primary shrink-0"
+                            />
+                            <span className="text-sm">{ch.title}</span>
+                          </label>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {selectedChapterIds.size > 0 && (
+                  <p className="text-xs text-primary">
+                    {selectedChapterIds.size} bab dipilih sebagai referensi soal
+                  </p>
+                )}
+              </div>
+
+              {/* Instruksi khusus */}
+              <div className="space-y-1.5">
+                <Label>
+                  Instruksi Khusus{" "}
+                  <span className="text-muted-foreground font-normal">(opsional)</span>
+                </Label>
+                <Textarea
+                  placeholder={`Contoh: "Fokus ke soal cerita konteks sehari-hari" atau "Hindari soal teori murni"`}
+                  value={instruction}
+                  onChange={(e) => setInstruction(e.target.value)}
+                  rows={2}
+                />
+              </div>
+            </>
+          )}
+        </div>
+
+        {!result && (
+          <div className="flex gap-2 pt-2 border-t">
+            <Button variant="outline" className="flex-1" onClick={handleClose} disabled={loading}>
+              Batal
+            </Button>
+            <Button
+              className="flex-1 gap-2"
+              onClick={handleGenerate}
+              disabled={loading || selectedChapterIds.size === 0}
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Generating...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4" />
+                  Generate {count} Soal
+                </>
+              )}
+            </Button>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ============================================================
 // Level 3 — Lesson detail editor (content + exercises + questions)
 // ============================================================
 
@@ -984,6 +1265,7 @@ function LessonDetailLevel({ subjectId, lessonId }: { subjectId: string; lessonI
   // Question create/edit dialog (per exercise)
   const [questionFormForExercise, setQuestionFormForExercise] = useState<string | null>(null);
   const [editingQuestion, setEditingQuestion] = useState<{ exercise: ExerciseDTO; question: QuestionDTO } | null>(null);
+  const [generateQsTarget, setGenerateQsTarget] = useState<ExerciseDTO | null>(null);
 
   // Delete confirmations
   const [deletingExercise, setDeletingExercise] = useState<ExerciseDTO | null>(null);
@@ -1045,7 +1327,7 @@ function LessonDetailLevel({ subjectId, lessonId }: { subjectId: string; lessonI
   });
 
   const createQuestionMut = useMutation({
-    mutationFn: (v: { exerciseId: string; text: string; options?: string[]; correctAnswer: string; explanation?: string; points?: number }) =>
+    mutationFn: (v: { exerciseId: string; text: string; options?: string[]; correctAnswer: string; explanation?: string; imageUrl?: string | null; points?: number }) =>
       api.createQuestion(v),
     onSuccess: () => {
       toast.success("Soal dibuat");
@@ -1057,7 +1339,7 @@ function LessonDetailLevel({ subjectId, lessonId }: { subjectId: string; lessonI
   });
 
   const updateQuestionMut = useMutation({
-    mutationFn: (args: { id: string; data: Partial<{ text: string; options: string[]; correctAnswer: string; explanation: string; points: number }> }) =>
+    mutationFn: (args: { id: string; data: Partial<{ text: string; options: string[]; correctAnswer: string; explanation: string; imageUrl: string | null; points: number }> }) =>
       api.updateQuestion(args.id, args.data),
     onSuccess: () => {
       toast.success("Soal diperbarui");
@@ -1166,6 +1448,7 @@ function LessonDetailLevel({ subjectId, lessonId }: { subjectId: string; lessonI
     options?: string[];
     correctAnswer: string;
     explanation: string;
+    imageUrl: string | null;
     points: number;
   }) => {
     if (editingQuestion) {
@@ -1327,6 +1610,7 @@ function LessonDetailLevel({ subjectId, lessonId }: { subjectId: string; lessonI
               <ExerciseCard
                 key={ex.id}
                 exercise={ex}
+                hasAttachments={lesson.attachments.length > 0}
                 onEdit={() => {
                   setEditingExercise(ex);
                   setExerciseFormOpen(true);
@@ -1336,6 +1620,7 @@ function LessonDetailLevel({ subjectId, lessonId }: { subjectId: string; lessonI
                   setEditingQuestion(null);
                   setQuestionFormForExercise(ex.id);
                 }}
+                onGenerateQuestions={() => setGenerateQsTarget(ex)}
                 onEditQuestion={(q) => {
                   setEditingQuestion({ exercise: ex, question: q });
                   setQuestionFormForExercise(ex.id);
@@ -1391,6 +1676,7 @@ function LessonDetailLevel({ subjectId, lessonId }: { subjectId: string; lessonI
                 options: editingQuestion.question.options,
                 correctAnswer: editingQuestion.question.correctAnswer,
                 explanation: editingQuestion.question.explanation ?? "",
+                imageUrl: editingQuestion.question.imageUrl ?? null,
                 points: editingQuestion.question.points,
                 exerciseType: editingQuestion.exercise.type,
               }
@@ -1508,6 +1794,17 @@ function LessonDetailLevel({ subjectId, lessonId }: { subjectId: string; lessonI
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Generate Questions Dialog — per exercise */}
+      <GenerateQuestionsDialog
+        exercise={generateQsTarget}
+        subjectId={subjectId}
+        onClose={() => setGenerateQsTarget(null)}
+        onSuccess={() => {
+          qc.invalidateQueries({ queryKey: ["subject", subjectId] });
+          setGenerateQsTarget(null);
+        }}
+      />
     </div>
   );
 }
@@ -1773,16 +2070,20 @@ function LessonContentEditor({
 
 function ExerciseCard({
   exercise,
+  hasAttachments,
   onEdit,
   onDelete,
   onAddQuestion,
+  onGenerateQuestions,
   onEditQuestion,
   onDeleteQuestion,
 }: {
   exercise: ExerciseDTO;
+  hasAttachments: boolean;
   onEdit: () => void;
   onDelete: () => void;
   onAddQuestion: () => void;
+  onGenerateQuestions: () => void;
   onEditQuestion: (q: QuestionDTO) => void;
   onDeleteQuestion: (q: QuestionDTO) => void;
 }) {
@@ -1829,7 +2130,11 @@ function ExerciseCard({
               </DropdownMenuItem>
               <DropdownMenuItem onClick={onAddQuestion}>
                 <Plus className="w-4 h-4" />
-                Tambah Soal
+                Tambah Soal Manual
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={onGenerateQuestions}>
+                <Sparkles className="w-4 h-4" />
+                ✨ Generate Soal AI
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem variant="destructive" onClick={onDelete}>
@@ -2439,6 +2744,76 @@ function ExerciseForm({
   );
 }
 
+// Load MathJax once per session for the tutor-side preview
+let _mjLoaded = false;
+function ensureMathJax() {
+  if (typeof window === "undefined" || _mjLoaded) return;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const w = window as any;
+  if (w.MathJax) { _mjLoaded = true; return; }
+  w.MathJax = { tex: { inlineMath: [["$", "$"]] }, startup: { ready() { w.MathJax.startup.defaultReady(); } } };
+  const s = document.createElement("script");
+  s.src = "https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-chtml.min.js";
+  s.async = true;
+  s.onload = () => { _mjLoaded = true; };
+  document.head.appendChild(s);
+}
+
+// Renders text containing $...$ LaTeX inline via MathJax loaded from CDN.
+function MathPreview({ text, className }: { text: string; className?: string }) {
+  const ref = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    ensureMathJax();
+    if (!ref.current) return;
+    ref.current.textContent = text || "";
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const w = window as any;
+    const typeset = () => { if (w.MathJax?.typesetPromise) w.MathJax.typesetPromise([ref.current!]).catch(() => {}); };
+    if (_mjLoaded) typeset();
+    else setTimeout(typeset, 800);
+  }, [text]);
+
+  return <div ref={ref} className={className} />;
+}
+
+// Math toolbar shortcuts: [label, latex snippet, cursor offset from end]
+const MATH_SHORTCUTS: { label: string; snippet: string }[] = [
+  { label: "½", snippet: "\\frac{}{}" },
+  { label: "√", snippet: "\\sqrt{}" },
+  { label: "∛", snippet: "\\sqrt[3]{}" },
+  { label: "xⁿ", snippet: "^{}" },
+  { label: "xₙ", snippet: "_{}" },
+  { label: "π", snippet: "\\pi" },
+  { label: "±", snippet: "\\pm" },
+  { label: "×", snippet: "\\times" },
+  { label: "÷", snippet: "\\div" },
+  { label: "≤", snippet: "\\leq" },
+  { label: "≥", snippet: "\\geq" },
+  { label: "≠", snippet: "\\neq" },
+  { label: "∞", snippet: "\\infty" },
+  { label: "°", snippet: "^{\\circ}" },
+];
+
+function MathToolbar({ onInsert }: { onInsert: (snippet: string) => void }) {
+  return (
+    <div className="flex flex-wrap gap-1 p-2 rounded-lg border bg-muted/30">
+      <span className="text-xs text-muted-foreground self-center mr-1">Sisipkan:</span>
+      {MATH_SHORTCUTS.map((s) => (
+        <button
+          key={s.label}
+          type="button"
+          onClick={() => onInsert(s.snippet)}
+          className="h-7 min-w-7 px-1.5 rounded border border-border bg-background text-sm font-mono hover:bg-accent transition"
+          title={s.snippet}
+        >
+          {s.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function QuestionFormDialog({
   open,
   onOpenChange,
@@ -2454,6 +2829,7 @@ function QuestionFormDialog({
     options: string[] | null;
     correctAnswer: string;
     explanation: string;
+    imageUrl: string | null;
     points: number;
     exerciseType: ExerciseType;
   };
@@ -2463,6 +2839,7 @@ function QuestionFormDialog({
     options?: string[];
     correctAnswer: string;
     explanation: string;
+    imageUrl: string | null;
     points: number;
   }) => void;
   submitting: boolean;
@@ -2494,6 +2871,7 @@ function QuestionForm({
     options: string[] | null;
     correctAnswer: string;
     explanation: string;
+    imageUrl: string | null;
     points: number;
     exerciseType: ExerciseType;
   };
@@ -2503,39 +2881,71 @@ function QuestionForm({
     options?: string[];
     correctAnswer: string;
     explanation: string;
+    imageUrl: string | null;
     points: number;
   }) => void;
   submitting: boolean;
 }) {
-  // When exercise type is MCQ, manage an options array. Otherwise, no options.
   const isMcq = exerciseType === "MCQ";
   const isTrueFalse = exerciseType === "TRUE_FALSE";
 
   const [text, setText] = useState(() => initial?.text ?? "");
-  // MCQ options state — starts with at least 2 empty fields.
   const [options, setOptions] = useState<string[]>(() => {
     if (initial?.options && initial.options.length > 0) return [...initial.options];
     return ["", ""];
   });
-  // For MCQ, correctAnswer is the value of the selected option.
-  // For TRUE_FALSE, correctAnswer is "Benar" or "Salah".
-  // For SHORT_ANSWER, correctAnswer is a free-text string.
   const [correctAnswer, setCorrectAnswer] = useState(() => {
     if (initial?.correctAnswer) return initial.correctAnswer;
     if (isTrueFalse) return "Benar";
     return "";
   });
   const [explanation, setExplanation] = useState(() => initial?.explanation ?? "");
-  const [points, setPoints] = useState(() =>
-    initial?.points ? String(initial.points) : "1"
-  );
+  const [points, setPoints] = useState(() => initial?.points ? String(initial.points) : "1");
+  const [imageUrl, setImageUrl] = useState<string | null>(() => initial?.imageUrl ?? null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [previewTab, setPreviewTab] = useState<"edit" | "preview">("edit");
+  const textareaRef = React.useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const insertMath = (snippet: string) => {
+    const ta = textareaRef.current;
+    if (!ta) { setText((t) => t + `$${snippet}$`); return; }
+    const start = ta.selectionStart;
+    const end = ta.selectionEnd;
+    const selected = text.slice(start, end);
+    const wrapped = selected ? `$${selected}${snippet}$` : `$${snippet}$`;
+    const next = text.slice(0, start) + wrapped + text.slice(end);
+    setText(next);
+    // place cursor inside last {}
+    requestAnimationFrame(() => {
+      const innerBrace = wrapped.lastIndexOf("{");
+      const newPos = start + (innerBrace >= 0 ? innerBrace + 1 : wrapped.length - 1);
+      ta.focus();
+      ta.setSelectionRange(newPos, newPos);
+    });
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    setUploadingImage(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/upload/question-image", { method: "POST", body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Gagal upload gambar");
+      setImageUrl(data.imageUrl);
+    } catch (err) {
+      toast.error((err as Error).message || "Gagal upload gambar");
+    } finally {
+      setUploadingImage(false);
+    }
+  };
 
   const updateOption = (idx: number, val: string) => {
-    setOptions((prev) => {
-      const next = [...prev];
-      next[idx] = val;
-      return next;
-    });
+    setOptions((prev) => { const next = [...prev]; next[idx] = val; return next; });
   };
   const addOption = () => setOptions((prev) => [...prev, ""]);
   const removeOption = (idx: number) =>
@@ -2543,7 +2953,6 @@ function QuestionForm({
       if (prev.length <= 2) return prev;
       const removed = prev[idx];
       const next = prev.filter((_, i) => i !== idx);
-      // If the removed option was the correct answer, reset.
       if (removed === correctAnswer) setCorrectAnswer("");
       return next;
     });
@@ -2551,32 +2960,16 @@ function QuestionForm({
   const handleSubmit = () => {
     const trimmedText = text.trim();
     if (!trimmedText) return;
+    const base = { text: trimmedText, explanation: explanation.trim(), imageUrl, points: parseInt(points, 10) || 1 };
     if (isMcq) {
       const validOptions = options.map((o) => o.trim()).filter(Boolean);
       if (validOptions.length < 2 || !validOptions.includes(correctAnswer.trim())) return;
-      onSubmit({
-        text: trimmedText,
-        options: validOptions,
-        correctAnswer: correctAnswer.trim(),
-        explanation: explanation.trim(),
-        points: parseInt(points, 10) || 1,
-      });
+      onSubmit({ ...base, options: validOptions, correctAnswer: correctAnswer.trim() });
     } else if (isTrueFalse) {
-      onSubmit({
-        text: trimmedText,
-        correctAnswer,
-        explanation: explanation.trim(),
-        points: parseInt(points, 10) || 1,
-      });
+      onSubmit({ ...base, correctAnswer });
     } else {
-      // SHORT_ANSWER
       if (!correctAnswer.trim()) return;
-      onSubmit({
-        text: trimmedText,
-        correctAnswer: correctAnswer.trim(),
-        explanation: explanation.trim(),
-        points: parseInt(points, 10) || 1,
-      });
+      onSubmit({ ...base, correctAnswer: correctAnswer.trim() });
     }
   };
 
@@ -2596,20 +2989,92 @@ function QuestionForm({
         <DialogTitle>{initial ? "Edit Soal" : "Tambah Soal"}</DialogTitle>
         <DialogDescription>
           Tipe: <span className="font-medium">{exerciseTypeLabel(exerciseType)}</span>
+          {" · "}Gunakan <code className="text-xs">$...$</code> untuk notasi matematika, mis. <code className="text-xs">$\frac{"{1}{2}"}$</code>
         </DialogDescription>
       </DialogHeader>
-      <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
+
+      <div className="space-y-4 max-h-[65vh] overflow-y-auto pr-1">
+        {/* Pertanyaan + toolbar + preview */}
         <div className="space-y-1.5">
-          <Label htmlFor="q-text">Pertanyaan</Label>
-          <Textarea
-            id="q-text"
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder="Tulis pertanyaan di sini..."
-            rows={3}
-          />
+          <div className="flex items-center justify-between">
+            <Label htmlFor="q-text">Pertanyaan</Label>
+            <div className="flex gap-1 rounded-md border p-0.5 text-xs">
+              <button
+                type="button"
+                onClick={() => setPreviewTab("edit")}
+                className={`px-2 py-0.5 rounded transition ${previewTab === "edit" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+              >
+                Edit
+              </button>
+              <button
+                type="button"
+                onClick={() => setPreviewTab("preview")}
+                className={`px-2 py-0.5 rounded transition ${previewTab === "preview" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+              >
+                Preview
+              </button>
+            </div>
+          </div>
+
+          <MathToolbar onInsert={insertMath} />
+
+          {previewTab === "edit" ? (
+            <Textarea
+              id="q-text"
+              ref={textareaRef}
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              placeholder="Tulis pertanyaan... Gunakan $...$ untuk rumus matematika, misal: Nilai $\frac{1}{2} + \frac{1}{3}$ adalah..."
+              rows={3}
+              className="font-mono text-sm"
+            />
+          ) : (
+            <MathPreview text={text} className="min-h-[72px] rounded-md border px-3 py-2 text-sm bg-muted/30" />
+          )}
         </div>
 
+        {/* Upload gambar soal */}
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between">
+            <Label>Gambar Soal <span className="text-muted-foreground font-normal text-xs">(opsional)</span></Label>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploadingImage}
+            >
+              {uploadingImage ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+              {imageUrl ? "Ganti Gambar" : "Upload Gambar"}
+            </Button>
+            <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/jpg,image/webp" className="hidden" onChange={handleImageUpload} />
+          </div>
+          {imageUrl ? (
+            <div className="relative rounded-lg border overflow-hidden">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={imageUrl} alt="Gambar soal" className="max-h-48 w-full object-contain bg-muted/20" />
+              <button
+                type="button"
+                onClick={() => setImageUrl(null)}
+                className="absolute top-2 right-2 h-6 w-6 rounded-full bg-background/90 border flex items-center justify-center hover:bg-destructive hover:text-destructive-foreground transition"
+                aria-label="Hapus gambar"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ) : (
+            <div
+              className="rounded-lg border border-dashed p-4 text-center text-xs text-muted-foreground cursor-pointer hover:bg-muted/30 transition"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <Image className="w-6 h-6 mx-auto mb-1 opacity-40" />
+              Klik untuk upload gambar soal (PNG/JPG/WebP, maks 5 MB)
+            </div>
+          )}
+        </div>
+
+        {/* Opsi jawaban MCQ */}
         {isMcq && (
           <div className="space-y-2">
             <div className="flex items-center justify-between">
@@ -2628,40 +3093,23 @@ function QuestionForm({
                       type="button"
                       onClick={() => opt.trim() && setCorrectAnswer(opt.trim())}
                       className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition ${
-                        checked
-                          ? "border-emerald-500 bg-emerald-500 text-white"
-                          : "border-muted-foreground/30 hover:border-emerald-500/50"
+                        checked ? "border-emerald-500 bg-emerald-500 text-white" : "border-muted-foreground/30 hover:border-emerald-500/50"
                       }`}
-                      aria-label={`Pilih sebagai jawaban benar`}
+                      aria-label="Pilih sebagai jawaban benar"
                       aria-pressed={checked}
                       disabled={!opt.trim()}
                     >
                       {checked && <Check className="w-3 h-3" />}
                     </button>
-                    <Input
-                      value={opt}
-                      onChange={(e) => updateOption(idx, e.target.value)}
-                      placeholder={`Opsi ${idx + 1}`}
-                      className="flex-1"
-                    />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
-                      onClick={() => removeOption(idx)}
-                      disabled={options.length <= 2}
-                      aria-label="Hapus opsi"
-                    >
+                    <Input value={opt} onChange={(e) => updateOption(idx, e.target.value)} placeholder={`Opsi ${idx + 1} — boleh pakai $rumus$`} className="flex-1 font-mono text-sm" />
+                    <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive" onClick={() => removeOption(idx)} disabled={options.length <= 2} aria-label="Hapus opsi">
                       <X className="w-3.5 h-3.5" />
                     </Button>
                   </div>
                 );
               })}
             </div>
-            <p className="text-xs text-muted-foreground">
-              Klik lingkaran hijau untuk menandai jawaban benar.
-            </p>
+            <p className="text-xs text-muted-foreground">Klik lingkaran hijau untuk menandai jawaban benar.</p>
           </div>
         )}
 
@@ -2669,9 +3117,7 @@ function QuestionForm({
           <div className="space-y-1.5">
             <Label>Jawaban Benar</Label>
             <Select value={correctAnswer} onValueChange={setCorrectAnswer}>
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
+              <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="Benar">Benar</SelectItem>
                 <SelectItem value="Salah">Salah</SelectItem>
@@ -2683,46 +3129,25 @@ function QuestionForm({
         {!isMcq && !isTrueFalse && (
           <div className="space-y-1.5">
             <Label htmlFor="q-answer">Jawaban Benar</Label>
-            <Input
-              id="q-answer"
-              value={correctAnswer}
-              onChange={(e) => setCorrectAnswer(e.target.value)}
-              placeholder="Jawaban yang diharapkan..."
-            />
-            <p className="text-xs text-muted-foreground">
-              Jawaban siswa akan dinilai case-insensitive setelah di-trim.
-            </p>
+            <Input id="q-answer" value={correctAnswer} onChange={(e) => setCorrectAnswer(e.target.value)} placeholder="Jawaban yang diharapkan..." className="font-mono text-sm" />
+            <p className="text-xs text-muted-foreground">Jawaban siswa dinilai case-insensitive setelah di-trim.</p>
           </div>
         )}
 
         <div className="space-y-1.5">
           <Label htmlFor="q-explanation">Pembahasan (opsional)</Label>
-          <Textarea
-            id="q-explanation"
-            value={explanation}
-            onChange={(e) => setExplanation(e.target.value)}
-            placeholder="Penjelasan jawaban yang ditampilkan setelah siswa submit..."
-            rows={2}
-          />
+          <Textarea id="q-explanation" value={explanation} onChange={(e) => setExplanation(e.target.value)} placeholder="Penjelasan jawaban — bisa juga pakai $rumus$..." rows={2} className="font-mono text-sm" />
         </div>
 
         <div className="space-y-1.5">
           <Label htmlFor="q-points">Poin</Label>
-          <Input
-            id="q-points"
-            type="number"
-            min={1}
-            value={points}
-            onChange={(e) => setPoints(e.target.value)}
-            className="w-24"
-          />
+          <Input id="q-points" type="number" min={1} value={points} onChange={(e) => setPoints(e.target.value)} className="w-24" />
         </div>
       </div>
+
       <DialogFooter>
         <DialogClose asChild>
-          <Button variant="outline" disabled={submitting}>
-            Batal
-          </Button>
+          <Button variant="outline" disabled={submitting}>Batal</Button>
         </DialogClose>
         <Button onClick={handleSubmit} disabled={!canSubmit || submitting}>
           {submitting && <Loader2 className="w-4 h-4 animate-spin" />}

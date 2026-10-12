@@ -23,6 +23,8 @@ import { ReportView } from "@/components/analytics/report-view";
 import { ParentDashboard } from "@/components/parent/parent-dashboard";
 import { ParentChildDetail } from "@/components/parent/parent-child-detail";
 import { ParentLinkChild } from "@/components/parent/parent-link-child";
+import { AttendanceManager } from "@/components/tutor/attendance-manager";
+import { AttendanceView } from "@/components/student/attendance-view";
 import type { SessionUser } from "@/lib/auth";
 
 export function ViewRouter({ user }: { user: SessionUser }) {
@@ -54,6 +56,8 @@ export function ViewRouter({ user }: { user: SessionUser }) {
         return <AchievementsView />;
       case "gameHistory":
         return <GameHistoryView />;
+      case "attendance":
+        return <AttendanceView />;
       case "dashboard":
       default:
         return <StudentDashboard />;
@@ -76,6 +80,8 @@ export function ViewRouter({ user }: { user: SessionUser }) {
   switch (view) {
     case "manage":
       return <ContentManager />;
+    case "attendance":
+      return <AttendanceManager />;
     case "students":
       return <StudentsView />;
     case "tutorAnalytics":

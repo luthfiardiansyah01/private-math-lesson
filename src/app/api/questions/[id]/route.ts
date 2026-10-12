@@ -40,6 +40,9 @@ export async function PUT(
       data.explanation = body.explanation;
     if ("points" in body && typeof body.points === "number") data.points = body.points;
     if ("order" in body && typeof body.order === "number") data.order = body.order;
+    if ("imageUrl" in body) {
+      data.imageUrl = typeof body.imageUrl === "string" && body.imageUrl ? body.imageUrl : null;
+    }
 
     if (Object.keys(data).length === 0) {
       return Response.json({ error: "No valid fields to update" }, { status: 400 });

@@ -4,21 +4,21 @@ const config: CapacitorConfig = {
   appId: "id.hikari.hikabridge",
   appName: "HIKABRIDGE",
   webDir: "www",
-  // Setelah deploy ke Railway, ganti URL di bawah dengan URL Railway kamu
-  // Contoh: "https://hikabridge-production.up.railway.app"
+  // Local network: PC dan HP harus terhubung ke WiFi yang sama
+  // Jalankan: npm run dev di PC, lalu buka APK di HP
   server: {
-    url: "https://your-app.railway.app",
-    cleartext: false,
+    url: "http://192.168.18.10:3000",
+    cleartext: true,
   },
   android: {
-    allowMixedContent: false,
+    allowMixedContent: true,
     captureInput: true,
-    webContentsDebuggingEnabled: false,
+    webContentsDebuggingEnabled: true,
   },
-  // Untuk development lokal: uncomment baris di bawah dan comment server.url di atas
+  // Untuk production (Railway/cloud): ganti dengan:
   // server: {
-  //   url: "http://192.168.x.x:3000",  // ganti dengan IP lokal kamu
-  //   cleartext: true,
+  //   url: "https://your-app.railway.app",
+  //   cleartext: false,
   // },
 };
 

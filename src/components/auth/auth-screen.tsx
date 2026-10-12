@@ -135,11 +135,27 @@ export function AuthScreen() {
 
           <Tabs value={mode} onValueChange={(v) => setMode(v as any)}>
             <TabsList className="grid w-full grid-cols-2 mb-6">
-              <TabsTrigger value="login">Masuk</TabsTrigger>
-              <TabsTrigger value="register">Daftar</TabsTrigger>
+              <TabsTrigger
+                value="login"
+                id="auth-trigger-login"
+                aria-controls="auth-content-login"
+              >
+                Masuk
+              </TabsTrigger>
+              <TabsTrigger
+                value="register"
+                id="auth-trigger-register"
+                aria-controls="auth-content-register"
+              >
+                Daftar
+              </TabsTrigger>
             </TabsList>
 
-            <TabsContent value="login">
+            <TabsContent
+              value="login"
+              id="auth-content-login"
+              aria-labelledby="auth-trigger-login"
+            >
               <Card className="border-border/60 shadow-sm">
                 <CardHeader>
                   <CardTitle>Selamat datang kembali</CardTitle>
@@ -195,7 +211,11 @@ export function AuthScreen() {
               </Card>
             </TabsContent>
 
-            <TabsContent value="register">
+            <TabsContent
+              value="register"
+              id="auth-content-register"
+              aria-labelledby="auth-trigger-register"
+            >
               <Card className="border-border/60 shadow-sm">
                 <CardHeader>
                   <CardTitle>Buat akun baru</CardTitle>

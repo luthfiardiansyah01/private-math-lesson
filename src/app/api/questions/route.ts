@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { exerciseId, text, options, correctAnswer, explanation, points, order } = body ?? {};
+    const { exerciseId, text, options, correctAnswer, explanation, imageUrl, points, order } = body ?? {};
 
     if (!exerciseId || !text || typeof text !== "string" || typeof correctAnswer !== "string") {
       return Response.json(
@@ -35,16 +35,14 @@ export async function POST(req: NextRequest) {
         options: Array.isArray(options) ? JSON.stringify(options.map(String)) : null,
         correctAnswer,
         explanation: typeof explanation === "string" ? explanation : null,
+        imageUrl: typeof imageUrl === "string" && imageUrl ? imageUrl : null,
         points: typeof points === "number" ? points : 1,
         order: typeof order === "number" ? order : 0,
       },
     });
 
     return Response.json(
-      {
-        ...question,
-        options: question.options ? JSON.parse(question.options) : null,
-      },
+      { ...question, options: question.options ? JSON.parse(question.options) : null },
       { status: 201 }
     );
   } catch (err) {
