@@ -58,3 +58,4 @@ www/
 
 # Android generated files (opsional: uncomment jika tidak mau commit android/)
 # /android/
+.vercel
