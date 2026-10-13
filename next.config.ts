@@ -11,9 +11,9 @@ const nextConfig: NextConfig = {
   // the "Cross origin request detected" dev warning (Next.js 16+).
   allowedDevOrigins: [
     "*.space-z.ai",
-    "localhost:3000",
-    "127.0.0.1:3000",
-    "192.168.18.10:3000",
+    "localhost",
+    "127.0.0.1",
+    "192.168.18.10",
   ],
 };
 

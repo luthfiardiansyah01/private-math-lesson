@@ -7,8 +7,8 @@ const config: CapacitorConfig = {
   // Local network: PC dan HP harus terhubung ke WiFi yang sama
   // Jalankan: npm run dev di PC, lalu buka APK di HP
   server: {
-    url: "http://192.168.18.10:3000",
-    cleartext: true,
+    url: "https://private-math-lesson.vercel.app",
+    cleartext: false,
   },
   android: {
     allowMixedContent: true,
